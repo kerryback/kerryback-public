@@ -1,0 +1,19 @@
+{
+  "name": "kerryback-public",
+  "owner": {
+    "name": "Kerry Back"
+  },
+  "description": "Public plugins: a reviewer for work Claude produced, and a narrated-video builder for slide decks.",
+  "plugins": [
+    {
+      "name": "critique",
+      "source": "./plugins/critique",
+      "description": "Critique work Claude produced and say what to do about it. Parallel reviewer agents -- correctness traced back to the files that produced each number, clarity, and a devil's advocate that reads the code -- then Claude argues against its own reviewers and publishes an HTML guide that leads with the verdict and lays out the paths forward. Heavyweight: it fans out multiple subagents."
+    },
+    {
+      "name": "voiceover",
+      "source": "./plugins/voiceover",
+      "description": "Turn a slide deck into a narrated MP4 video plus a transcript. Give it the PDF of your slides and Claude writes the narration; a local app shows each slide beside its script, where you edit it, pick an ElevenLabs voice, and generate. The MP4 and transcript are saved to your working directory."
+    }
+  ]
+}

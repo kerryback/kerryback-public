@@ -1,0 +1,8 @@
+{
+  "name": "critique",
+  "description": "Critique work Claude produced and say what to do about it. Parallel reviewer agents -- correctness traced back to the files that produced each number, clarity, a devil's advocate that reads the code rather than the prose, and a referee lane for academic papers that hands off to econ-review when it is installed. Every finding must carry located evidence, a consequence specific to this work, a proportionate repair, and a condition that would defeat it; Claude then argues against its own reviewers before showing you anything. Delivers an HTML guide that leads with the verdict and lays out the alternative paths forward -- narrow the claim, run one decisive check, reframe, redesign, or ship -- as choices with costs, not as a checklist. Heavyweight: it fans out multiple subagents.",
+  "version": "1.1.0",
+  "author": {
+    "name": "Kerry Back"
+  }
+}

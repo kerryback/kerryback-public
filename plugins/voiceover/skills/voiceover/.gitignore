@@ -1,0 +1,25 @@
+# Secrets — never commit
+**/.env
+**/.env.*
+!**/.env.example
+
+# Runtime project data (SQLite DB + generated bundles)
+backend/data/
+data/
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/.venv/
+**/venv/
+
+# Node / frontend build
+**/node_modules/
+
+# Local test decks / scratch uploads (root-level only)
+/*.pdf
+/*.pptx
+
+# OS / editor
+.DS_Store
+*.swp
