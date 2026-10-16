@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+*.db
+config.toml
+# per-user runtime state (normally in the litdb data dir; ignored here in case
+# LITDB_HOME points into the repo during development)
+.onboarded
+preferences.json

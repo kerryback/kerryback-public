@@ -1,0 +1,45 @@
+[
+  {
+    "id": "jegadeesh1993",
+    "type": "article-journal",
+    "title": "Returns to Buying Winners and Selling Losers: Implications for Stock Market Efficiency",
+    "author": [
+      {"family": "Jegadeesh", "given": "Narasimhan"},
+      {"family": "Titman", "given": "Sheridan"}
+    ],
+    "container-title": "The Journal of Finance",
+    "issued": {"date-parts": [[1993]]},
+    "DOI": "10.1111/j.1540-6261.1993.tb04702.x",
+    "abstract": "This paper documents that strategies which buy stocks that have performed well in the past and sell stocks that have performed poorly generate significant positive returns over three- to twelve-month holding periods. This momentum effect is not explained by systematic risk.",
+    "keyword": "momentum, market efficiency, asset pricing"
+  },
+  {
+    "id": "fama1993",
+    "type": "article-journal",
+    "title": "Common Risk Factors in the Returns on Stocks and Bonds",
+    "author": [
+      {"family": "Fama", "given": "Eugene F."},
+      {"family": "French", "given": "Kenneth R."}
+    ],
+    "container-title": "Journal of Financial Economics",
+    "issued": {"date-parts": [[1993]]},
+    "DOI": "10.1016/0304-405X(93)90023-5",
+    "abstract": "We identify five common risk factors in the returns on stocks and bonds. Three stock-market factors: an overall market factor and factors related to firm size and book-to-market equity capture the cross-section of average stock returns.",
+    "keyword": "factor models; size; value; asset pricing"
+  },
+  {
+    "id": "campbell2008",
+    "type": "article-journal",
+    "title": "In Search of Distress Risk",
+    "author": [
+      {"family": "Campbell", "given": "John Y."},
+      {"family": "Hilscher", "given": "Jens"},
+      {"family": "Szilagyi", "given": "Jan"}
+    ],
+    "container-title": "The Journal of Finance",
+    "issued": {"date-parts": [[2008]]},
+    "DOI": "10.1111/j.1540-6261.2008.01416.x",
+    "abstract": "This paper explores the determinants of corporate failure and the pricing of financially distressed stocks whose failure probability is high. Distressed stocks have delivered anomalously low returns.",
+    "keyword": "distress risk, bankruptcy, credit"
+  }
+]

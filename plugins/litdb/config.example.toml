@@ -1,0 +1,45 @@
+# litdb configuration (optional). Copy to the litdb data directory as
+# config.toml, or point LITDB_CONFIG at this file. Phase 1 needs none of this;
+# defaults work out of the box.
+#
+# Data location (where litdb.db lives) is controlled by environment variables,
+# not this file:
+#   LITDB_HOME  overrides the whole data directory
+#   LITDB_DB    overrides just the database file path
+
+[embedding]
+# Phase 2+. The provider is swappable: local (ollama/fastembed) or hosted
+# (voyage/openai). Switching provider requires a one-time reindex because
+# different models produce incompatible vector spaces and dimensions.
+provider = "ollama"        # ollama | fastembed | voyage | openai
+model    = "nomic-embed-text"
+dim      = 768
+
+[embedding.voyage]
+api_key_env = "VOYAGE_API_KEY"
+
+[embedding.openai]
+api_key_env = "OPENAI_API_KEY"
+
+[policy]
+# Confidential notes never leave the machine, even when the default embedder is
+# a hosted API — they are always embedded with local_provider.
+confidential_stay_local = true
+local_provider = "ollama:nomic-embed-text"
+
+[zotero]
+# Zotero 7 local API endpoint (fallback for `litdb import-zotero --local`).
+local_api = "http://localhost:23119/api/users/0/items"
+# Better BibTeX JSON-RPC. Preferred automatically when reachable (captures
+# LaTeX-friendly citation keys). Needs Zotero running with the Better BibTeX add-on.
+bbt_rpc = "http://localhost:23119/better-bibtex/json-rpc"
+
+[external]
+# OpenAlex is free and needs no key; adding your email joins the faster "polite
+# pool" and is good etiquette.
+openalex_mailto = ""
+# Semantic Scholar works without a key but rate-limits anonymous requests (429).
+# Put your key in this environment variable to raise the limit.
+s2_api_key_env = "S2_API_KEY"
+default_source = "openalex"   # openalex | s2
+timeout = 20

@@ -1,0 +1,8 @@
+{
+  "name": "finance-data",
+  "description": "Fetch free financial, market, and economic data (prices/OHLCV, fundamentals, SEC filings, macro time series, asset-pricing factors) from Yahoo, Stooq, SEC EDGAR, FRED, Ken French, FinnHub, FMP, and US Treasury, and save it as CSV.",
+  "version": "1.1.0",
+  "author": {
+    "name": "Kerry Back"
+  }
+}

@@ -1,0 +1,178 @@
+  :root {
+    --ground: #ffffff;
+    --panel: #f7f8fa;
+    --ink: #1b1f24;
+    --muted: #58657a;
+    --rule: #dde2ea;
+    --accent: #00205b;
+    --accent-soft: #eef2f9;
+    --flag: #8a5a00;
+    --flag-soft: #fbf3e2;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  /* Follow whatever the reader's machine is set to. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #13171d; --panel: #1a1f27; --ink: #e6eaf0; --muted: #a2adbd;
+      --rule: #2b323c; --accent: #9db8ef; --accent-soft: #1b2332;
+      --flag: #e3b766; --flag-soft: #2a2416;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #13171d; --panel: #1a1f27; --ink: #e6eaf0; --muted: #a2adbd;
+    --rule: #2b323c; --accent: #9db8ef; --accent-soft: #1b2332;
+    --flag: #e3b766; --flag-soft: #2a2416;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font: 16px/1.55 var(--serif); padding-inline: 16px;
+  }
+  main { max-width: 74rem; margin: 0 auto; padding-block: 2.2rem 4rem; }
+
+  header { border-bottom: 3px solid var(--accent); padding-bottom: 1rem; margin-bottom: 1.6rem; }
+  .eyebrow {
+    font-family: var(--sans); font-size: .70rem; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 .5rem;
+  }
+  h1 { font-size: 1.9rem; margin: 0 0 .3rem; line-height: 1.15; }
+  .sub { color: var(--muted); font-size: .95rem; margin: 0; }
+
+  h2 {
+    font-family: var(--sans); font-size: .78rem; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--muted); font-weight: 600;
+    margin: 2.4rem 0 .7rem; padding-bottom: .35rem; border-bottom: 1px solid var(--rule);
+  }
+
+  .warnings { list-style: none; padding: 0; margin: 0 0 1.2rem; }
+  .warnings li {
+    background: var(--flag-soft); border-left: 3px solid var(--flag);
+    padding: .55rem .8rem; margin-bottom: .4rem; font-size: .9rem;
+    font-family: var(--sans);
+  }
+
+  .headline { display: flex; flex-wrap: wrap; gap: 1px; background: var(--rule);
+              border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+  .headline div { background: var(--panel); padding: .9rem 1.1rem; flex: 1 1 11rem; }
+  .headline .lab {
+    font-family: var(--sans); font-size: .68rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--muted); display: block; margin-bottom: .25rem;
+  }
+  .headline .val { font-size: 1.5rem; font-family: var(--mono); }
+  .headline .val.big { color: var(--accent); }
+
+  .scroller { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: .82rem; }
+  th, td { padding: .3rem .5rem; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+  th:first-child, td:first-child {
+    text-align: left; font-family: var(--sans); font-size: .82rem;
+    white-space: normal; min-width: 15rem;
+    position: sticky; left: 0; background: var(--ground); z-index: 1;
+  }
+  thead th {
+    font-family: var(--sans); font-size: .72rem; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted); border-bottom: 2px solid var(--rule);
+  }
+  thead th.fc { color: var(--accent); }
+  tr.group td {
+    font-family: var(--sans); font-size: .72rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--muted); padding-top: .9rem;
+  }
+  td.hist { color: var(--muted); background: var(--panel); }
+  td.fc { color: var(--ink); }
+  tr.total td { border-top: 2px solid var(--rule); border-bottom: none; font-weight: 700; }
+  tr.derived td { color: var(--muted); }
+  td.sens { background: var(--panel); }
+  td.sens.here { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+  td.wrap { white-space: normal; text-align: left; font-family: var(--sans); font-size: .8rem; }
+
+  details { margin-top: .6rem; }
+  summary {
+    font-family: var(--sans); font-size: .82rem; color: var(--accent);
+    cursor: pointer; padding: .3rem 0;
+  }
+  .note { font-family: var(--sans); font-size: .87rem; color: var(--muted); margin: .5rem 0 0; }
+  .note.body { color: var(--ink); }
+  .rationale { font-family: var(--sans); font-size: .85rem; margin: .6rem 0 0; }
+  .rationale b { font-weight: 600; }
+
+  .lead {
+    font-size: 1.02rem; margin: .2rem 0 1.4rem; color: var(--ink);
+    border-left: 3px solid var(--accent); padding-left: .9rem;
+  }
+  .guide { margin: 0 0 2rem; }
+  .guide h3 {
+    font-family: var(--sans); font-size: 1rem; margin: 1.6rem 0 .1rem;
+    color: var(--accent); font-weight: 600;
+  }
+  .guide .strip {
+    font-family: var(--mono); font-size: .78rem; color: var(--muted);
+    margin: .25rem 0 .6rem; white-space: normal;
+  }
+  .guide .strip b { color: var(--ink); font-weight: 400; }
+  .guide p.how { margin: .5rem 0 0; font-size: .95rem; }
+  .guide blockquote {
+    margin: .7rem 0 0; padding: .5rem .9rem; background: var(--panel);
+    border-left: 3px solid var(--rule); font-size: .9rem;
+  }
+  .guide blockquote cite {
+    display: block; margin-top: .35rem; font-family: var(--sans);
+    font-size: .78rem; color: var(--muted); font-style: normal;
+  }
+  .rates { font-family: var(--sans); font-size: .87rem; margin: .9rem 0 0; color: var(--muted); }
+  .rates b { color: var(--ink); font-family: var(--mono); font-weight: 400; }
+  .drive {
+    background: var(--accent-soft); border-left: 3px solid var(--accent);
+    padding: .7rem .9rem; font-family: var(--sans); font-size: .88rem;
+    margin: 1.1rem 0 0; color: var(--ink);
+  }
+  .drive code { font-family: var(--mono); font-size: .92em; }
+
+/* The driver ranking: a bar you can read across at a glance. */
+td.bar { width: 40%; min-width: 8rem; }
+td.bar span {
+  display: block; height: .55rem; border-radius: 2px;
+  background: var(--accent); opacity: .75;
+}
+
+/* Tabs: Line items, Forecasts, Baseline, DCF. */
+nav.tabs { display: flex; flex-wrap: wrap; gap: .25rem; border-bottom: 1px solid var(--rule); margin: 0 0 1.4rem; }
+nav.tabs button {
+  font-family: var(--sans); font-size: .9rem; background: none; border: 0;
+  border-bottom: 3px solid transparent; color: var(--muted); padding: .55rem .9rem;
+  cursor: pointer; margin-bottom: -1px;
+}
+nav.tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+nav.tabs button:hover { color: var(--ink); }
+[role="tabpanel"][hidden] { display: none; }
+[role="tabpanel"] > h2:first-child { margin-top: .4rem; }
+.scroller.spaced { margin-top: .8rem; }
+
+/* The editable Baseline grid. */
+td.fc input, .rates input {
+  width: 4.4rem; font: inherit; font-family: var(--mono); text-align: right;
+  color: var(--ink); background: var(--ground); border: 1px solid var(--rule);
+  border-radius: 3px; padding: .12rem .3rem;
+}
+.rates input { width: 5.2rem; }
+td.fc input:focus, .rates input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+input.edited { background: var(--accent-soft); border-color: var(--accent); }
+input.bad { background: var(--flag-soft); border-color: var(--flag); }
+.u { color: var(--muted); font-size: .75rem; margin-left: .15rem; }
+.readout {
+  display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; justify-content: space-between;
+  background: var(--accent-soft); border-left: 3px solid var(--accent);
+  padding: .7rem .9rem; font-family: var(--sans); font-size: .9rem; margin: 1.1rem 0 0;
+}
+.readout b { font-family: var(--mono); color: var(--accent); }
+.readout button, details.csv button {
+  font-family: var(--sans); font-size: .82rem; color: var(--accent); background: var(--ground);
+  border: 1px solid var(--accent); border-radius: 4px; padding: .3rem .7rem; cursor: pointer;
+}
+details.csv textarea {
+  display: block; width: 100%; margin: .5rem 0; font-family: var(--mono); font-size: .78rem;
+  color: var(--ink); background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: .5rem;
+}
+.warnings:empty { display: none; }

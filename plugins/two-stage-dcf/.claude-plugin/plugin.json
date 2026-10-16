@@ -1,0 +1,16 @@
+{
+  "name": "two-stage-dcf",
+  "version": "1.1.0",
+  "description": "Two-stage enterprise valuation from a company's financial statements and text, fetched for a ticker (statements and 10-Ks from SEC EDGAR, press releases from 8-Ks, call transcripts from the Motley Fool) or read from a folder. Classifies every reported balance-sheet line and foots it, computes the historical driver ratios with a script, reads the MD&A, transcripts and press releases for evidence on each driver, and writes one HTML page with four tabs: Line items (the classification), Forecasts (the argument for each assumption with quoted citations), an editable Baseline grid, and DCF, which revalues in the browser as the Baseline is edited, with a measured ranking of what moves the answer. The numbers live in a CSV that rebuilds the page, so the assumptions can be argued over and revised; when they are settled it delivers an Excel workbook whose model is live formulas, with sensitivity and driver-ranking sheets and a Check sheet that goes red if the formulas ever disagree with the Python engine.",
+  "author": {
+    "name": "Kerry Back"
+  },
+  "license": "MIT",
+  "keywords": [
+    "dcf",
+    "valuation",
+    "enterprise-value",
+    "corporate-finance",
+    "financial-modeling"
+  ]
+}

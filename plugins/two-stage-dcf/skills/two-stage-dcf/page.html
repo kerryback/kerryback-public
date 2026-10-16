@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+__STYLES__
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <p class="eyebrow">Two-stage enterprise valuation</p>
+  <h1>__COMPANY__</h1>
+  <p class="sub">__SUBTITLE__</p>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" id="t-lines" aria-controls="p-lines" aria-selected="true">Line items</button>
+  <button role="tab" id="t-evidence" aria-controls="p-evidence" aria-selected="false">Forecasts</button>
+  <button role="tab" id="t-baseline" aria-controls="p-baseline" aria-selected="false">Baseline</button>
+  <button role="tab" id="t-dcf" aria-controls="p-dcf" aria-selected="false">DCF</button>
+</nav>
+
+<section role="tabpanel" id="p-lines" aria-labelledby="t-lines">
+<h2>Classification of every reported balance-sheet line</h2>
+<p class="note">Which lines consume cash as the business grows (operating assets,
+operating liabilities, net PP&amp;E), which are claims on what it produces or are
+added in the bridge (debt claims, equity claims, nonoperating assets), and which
+do neither (excluded). Everything downstream inherits this, so it is worth
+disagreeing with here rather than later.</p>
+<div class="scroller">__CLASSIFICATION__</div>
+</section>
+
+<section role="tabpanel" id="p-evidence" aria-labelledby="t-evidence" hidden>
+<p class="lead">Every number on the Baseline tab is a suggestion, not a conclusion.
+They are a defensible starting point drawn from the history and from what
+management has said, and they are where the argument begins rather than where it
+ends. Each driver gets a section of its own below: what its history shows, what
+actually makes it move, what would make you choose differently, and the quoted
+evidence. The decision is yours.</p>
+<h2>Driver by driver</h2>
+__GUIDANCE__
+__HISTORY_NOTES__
+</section>
+
+<section role="tabpanel" id="p-baseline" aria-labelledby="t-baseline" hidden>
+<h2>Suggested forecasts with historicals</h2>
+<p class="note">Shaded columns are history. The rest are the suggested forecasts,
+and every one is editable: the DCF tab revalues as you type, and edited cells are
+highlighted. The reasoning behind each suggestion is on the Forecasts tab.</p>
+<div class="scroller spaced">__BASELINE__</div>
+__RATES__
+<div class="readout">
+  <span id="readout-text">Value per share at these forecasts: <b>__PER_SHARE__</b> — details on the DCF tab.</span>
+  <button type="button" id="reset">Reset to suggested</button>
+</div>
+<details class="csv">
+  <summary>These numbers as assumptions.csv</summary>
+  <p class="note">The same grid in the format the skill reads, to keep a set of
+  numbers you have settled on.</p>
+  <textarea id="csv-text" readonly rows="10" aria-label="assumptions.csv"></textarea>
+  <button type="button" id="copy-csv">Copy</button>
+</details>
+</section>
+
+<section role="tabpanel" id="p-dcf" aria-labelledby="t-dcf" hidden>
+<ul class="warnings" id="warnings">__WARNINGS__</ul>
+<div class="headline">
+  <div><span class="lab">Enterprise value</span><span class="val" id="h-ev">__EV__</span></div>
+  <div><span class="lab">Equity value</span><span class="val" id="h-eq">__EQUITY__</span></div>
+  <div><span class="lab">Value per share</span><span class="val big" id="h-vps">__PER_SHARE__</span></div>
+</div>
+<p class="drive" id="dcf-status">Valued on the suggested forecasts in the Baseline
+tab. Edit them there and this tab revalues.</p>
+
+<h2>Forecast</h2>
+<div class="scroller" id="schedule">__SCHEDULE__</div>
+<p class="note">Year 6 runs on the terminal assumptions and absorbs the
+balance-sheet transition. The perpetuity sits on year 7, which is why year 7 is
+shown but not discounted into the explicit sum.</p>
+
+<h2>From enterprise value to the shareholders</h2>
+<div class="scroller" id="bridge">__BRIDGE__</div>
+
+<h2>Sensitivity — value per share</h2>
+<div class="scroller" id="sensitivity">__SENSITIVITY__</div>
+
+<h2>Which arguments are worth having</h2>
+<p class="note">How much a change in each driver moves the equity value, given
+the current assumptions. Each driver is moved one notch each way in every
+forecast year at once — the five explicit years and the perpetuity together, not
+the perpetuity alone — and the model re-run. These are a local measure around the
+current assumptions and shift as you edit them. The span is shown as a share of
+value; a driver near the bottom is one you can settle quickly.</p>
+<div class="scroller" id="ranking">__RANKING__</div>
+
+<h2>Cost of capital</h2>
+<p class="note body">__WACC_NOTE__</p>
+
+<h2>The model</h2>
+<p class="note body">
+  Sales grow at <i>g</i>. EBITDA is a margin on sales. Net PP&amp;E at the end of
+  year <i>t</i> is next year's sales divided by the sales-to-PP&amp;E turnover —
+  the one line that leads sales by a year, because capacity is built ahead of the
+  volume it serves. Depreciation is a rate on prior-year net PP&amp;E, and capex is
+  the plug that reconciles the two; in steady state it lands at (<i>g</i> +
+  <i>d</i>) times prior net PP&amp;E. Every other operating asset and liability is
+  a ratio to the same year's sales. Free cash flow is EBITDA less cash taxes on
+  EBIT, less capex, less the change in working capital. Taxes are unlevered; the
+  interest shield lives in the discount rate. A running NOL carryforward shelters
+  the explicit years; anything still alive after year 6 is valued separately and
+  appears in the bridge, so the perpetuity is taxed at the full rate and stays a
+  genuine steady state.
+</p>
+</section>
+
+</main>
+<script type="application/json" id="dcf-data">__DATA__</script>
+<script>
+__SCRIPT__
+</script>
+__LIVE__
+</body>
+</html>

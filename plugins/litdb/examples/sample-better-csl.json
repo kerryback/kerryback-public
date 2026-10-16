@@ -1,0 +1,32 @@
+[
+  {
+    "id": "jegadeesh1993returns",
+    "citation-key": "jegadeesh1993returns",
+    "type": "article-journal",
+    "title": "Returns to Buying Winners and Selling Losers",
+    "author": [
+      {"family": "Jegadeesh", "given": "Narasimhan"},
+      {"family": "Titman", "given": "Sheridan"}
+    ],
+    "container-title": "The Journal of Finance",
+    "issued": {"date-parts": [[1993]]},
+    "DOI": "10.1111/j.1540-6261.1993.tb04702.x",
+    "abstract": "Momentum strategies generate significant positive returns over three- to twelve-month horizons.",
+    "keyword": "momentum, asset pricing"
+  },
+  {
+    "id": "shleifer1997limits",
+    "citation-key": "shleifer1997limits",
+    "type": "article-journal",
+    "title": "The Limits of Arbitrage",
+    "author": [
+      {"family": "Shleifer", "given": "Andrei"},
+      {"family": "Vishny", "given": "Robert W."}
+    ],
+    "container-title": "The Journal of Finance",
+    "issued": {"date-parts": [[1997]]},
+    "DOI": "10.1111/j.1540-6261.1997.tb03807.x",
+    "abstract": "Arbitrage conducted by professional investors with limited capital can be ineffective in extreme circumstances.",
+    "keyword": "arbitrage, market efficiency"
+  }
+]

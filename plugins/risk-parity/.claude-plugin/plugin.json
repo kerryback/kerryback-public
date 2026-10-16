@@ -1,0 +1,16 @@
+{
+  "name": "risk-parity",
+  "version": "0.1.0",
+  "description": "The risk parity (equal risk contribution) portfolio and the covariance matrix it needs, from a file of historical returns, prices, or a covariance matrix: long-only weights in which every asset supplies the same share of portfolio variance, solved by cyclical coordinate descent on the log-barrier form, with each asset's risk share and inverse-volatility weight reported alongside. Needs only numpy and pandas.",
+  "author": {
+    "name": "Kerry Back"
+  },
+  "license": "MIT",
+  "keywords": [
+    "risk-parity",
+    "equal-risk-contribution",
+    "risk-budgeting",
+    "covariance",
+    "portfolio-construction"
+  ]
+}

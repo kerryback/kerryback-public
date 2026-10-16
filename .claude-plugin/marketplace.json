@@ -3,7 +3,7 @@
   "owner": {
     "name": "Kerry Back"
   },
-  "description": "Public plugins: a reviewer for work Claude produced, and a narrated-video builder for slide decks.",
+  "description": "Public plugins: a reviewer for work Claude produced, a narrated-video builder for slide decks, a personal literature knowledge base, free financial and economic data, WRDS research data, two-stage DCF valuation, and risk parity portfolios.",
   "plugins": [
     {
       "name": "critique",
@@ -14,6 +14,31 @@
       "name": "voiceover",
       "source": "./plugins/voiceover",
       "description": "Turn a slide deck into a narrated MP4 video plus a transcript. Give it the PDF of your slides and Claude writes the narration; a local app shows each slide beside its script, where you edit it, pick an ElevenLabs voice, and generate. The MP4 and transcript are saved to your working directory."
+    },
+    {
+      "name": "litdb",
+      "source": "./plugins/litdb",
+      "description": "Personal literature + notes knowledge base: hybrid keyword+semantic search over your papers and notes, Zotero/Better BibTeX import, loose-PDF folder ingestion with full text, OpenAlex/Semantic Scholar discovery, and a citation graph. Local-first; the runtime installs into ~/.litdb on first use."
+    },
+    {
+      "name": "finance-data",
+      "source": "./plugins/finance-data",
+      "description": "Fetch free financial, market, and economic data (prices, fundamentals, SEC filings, macro series, asset-pricing factors) from Yahoo, Stooq, SEC EDGAR, FRED, Ken French, FinnHub, FMP, and US Treasury, and save it as CSV."
+    },
+    {
+      "name": "wrds",
+      "source": "./plugins/wrds",
+      "description": "Empirical asset-pricing data from WRDS (CRSP v2/Compustat) and Open Source Asset Pricing: extractable Python building blocks for connect (without a 2FA prompt), pull, merge, market cap aggregated across share classes, the CRSP-Compustat link, book equity, accounting alignment and firm age — every query run against live WRDS. Surfaces the constructions that are genuine decisions rather than common practice (Ken French vs Drechsler's WRDS script vs OpenAP, and the 4- vs 6-month reporting lag) instead of picking silently, and ships twelve WRDS reference scripts."
+    },
+    {
+      "name": "two-stage-dcf",
+      "source": "./plugins/two-stage-dcf",
+      "description": "Two-stage enterprise valuation from a company's financial statements and text, fetched for a ticker (statements and 10-Ks from SEC EDGAR, press releases from 8-Ks, call transcripts from the Motley Fool) or read from a folder. Classifies every reported balance-sheet line and foots it, computes the historical driver ratios with a script, reads the MD&A, transcripts and press releases for evidence on each driver, and writes one HTML page with four tabs: Line items (the classification), Forecasts (the argument for each assumption with quoted citations), an editable Baseline grid, and DCF, which revalues in the browser as the Baseline is edited, with a measured ranking of what moves the answer. The numbers live in a CSV that rebuilds the page, so the assumptions can be argued over and revised; when they are settled it delivers an Excel workbook whose model is live formulas, with sensitivity and driver-ranking sheets and a Check sheet that goes red if the formulas ever disagree with the Python engine."
+    },
+    {
+      "name": "risk-parity",
+      "source": "./plugins/risk-parity",
+      "description": "The risk parity (equal risk contribution) portfolio and the covariance matrix it needs, from historical returns, prices, or a covariance matrix: long-only weights in which every asset supplies the same share of portfolio variance, with each asset's risk share and inverse-volatility weight alongside."
     }
   ]
 }

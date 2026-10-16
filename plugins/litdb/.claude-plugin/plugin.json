@@ -1,0 +1,17 @@
+{
+  "name": "litdb",
+  "version": "0.5.0",
+  "description": "Private knowledge base for research papers you use by talking to Claude: add your PDFs and search their full text by keyword and meaning, discover new work via OpenAlex/Semantic Scholar, track citations, and generate your .bib — with optional Zotero integration. Local-first; the runtime installs into ~/.litdb automatically on first use.",
+  "author": {
+    "name": "Kerry Back"
+  },
+  "license": "MIT",
+  "keywords": [
+    "literature-review",
+    "zotero",
+    "research",
+    "knowledge-base",
+    "search"
+  ],
+  "skills": "./skills/"
+}

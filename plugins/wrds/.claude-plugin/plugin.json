@@ -1,0 +1,17 @@
+{
+  "name": "wrds",
+  "version": "0.4.0",
+  "description": "Empirical asset-pricing data from WRDS (CRSP v2/Compustat) and Open Source Asset Pricing, with vetted Python building blocks: non-interactive connection that does not trigger a 2FA prompt (SQLAlchemy over psycopg2, password from ~/.pgpass), safe wrds install (no pandas downgrade), CRSP v2/CIZ conventions, the window-join trap that silently deletes delisting months, market cap aggregated across share classes (permco), the CRSP-Compustat link, firm age, and delisting/survivorship/microcap/Newey-West standards. Surfaces every construction where the three reference conventions (Ken French, Drechsler's WRDS script, Open Source Asset Pricing) disagree \u2014 preferred-stock valuation, the shareholders'-equity cascade, dropping negative book equity, accounting alignment, and the 4- vs 6-month reporting lag \u2014 and refuses to pick them silently. Every query run against live WRDS.",
+  "author": {
+    "name": "Kerry Back"
+  },
+  "license": "MIT",
+  "keywords": [
+    "wrds",
+    "crsp",
+    "compustat",
+    "asset-pricing",
+    "openap",
+    "empirical-finance"
+  ]
+}
