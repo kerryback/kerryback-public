@@ -11,6 +11,7 @@ A Claude plugin marketplace.
 | `wrds` | Empirical asset-pricing data from WRDS (CRSP, Compustat) and Open Source Asset Pricing, as extractable Python builds. Needs a WRDS account. |
 | `two-stage-dcf` | Two-stage enterprise valuation. Fetches a company's statements, 10-Ks, press releases and call transcripts, argues for each forecast assumption from them, and writes one page with an editable baseline that revalues the DCF in the browser, plus an Excel workbook. |
 | `risk-parity` | The risk parity (equal risk contribution) portfolio, and the covariance matrix it needs, from historical returns. |
+| `tutor` | One-on-one tutors that coach a student to the answer instead of giving it: `/tutor:binomial` (binomial option pricing) and `/tutor:agency` (agency and authority in business law). |
 
 ## Install
 

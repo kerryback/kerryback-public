@@ -1,0 +1,9 @@
+{
+  "name": "tutor",
+  "description": "One-on-one tutoring skills. Each skill coaches a student through a piece of course material by handing them problems and diagnosing their answers rather than presenting worked solutions. Currently ships binomial option pricing (replicating portfolios, risk-neutral probabilities, backward induction, early exercise) and agency law (actual and apparent authority, ratification and estoppel, liability on the contract). Install once and every tutor in the collection is available as /tutor:<subject>.",
+  "version": "2.1.0",
+  "author": {
+    "name": "Kerry Back"
+  },
+  "license": "MIT"
+}
