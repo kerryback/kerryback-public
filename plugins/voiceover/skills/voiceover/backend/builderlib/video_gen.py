@@ -178,10 +178,21 @@ def generate(pid: str, progress=None) -> Path:
     list_file.write_text(
         "".join(f"file '{seg.as_posix()}'\n" for seg in ordered), encoding="utf-8")
 
+    # The first slide doubles as the file's cover art (an attached_pic stream),
+    # so Finder, QuickTime and file browsers show the title slide as the
+    # thumbnail instead of whatever frame they happen to grab.
+    cover = work / "cover.jpg"
+    subprocess.run(
+        [FFMPEG, "-y", "-i", str(jobs[0][1]), "-vf", vscale.replace(
+            ",format=yuv420p", ",format=yuvj420p"), "-frames:v", "1", "-q:v", "2", str(cover)],
+        capture_output=True, text=True, check=True)
+
     out = store.video_path(pid)
     subprocess.run(
         [FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", str(list_file),
-         "-c", "copy", "-movflags", "+faststart", str(out)],
+         "-i", str(cover), "-map", "0", "-map", "1", "-c", "copy",
+         "-disposition:v:1", "attached_pic", "-movflags", "+faststart",
+         str(out)],
         capture_output=True, text=True, check=True)
 
     import shutil
