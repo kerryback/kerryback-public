@@ -10,7 +10,21 @@
 // speed tiers. Labels say what each one sounds like, not just where it sits on
 // a quality ladder — "highest quality" on v2 was actively misleading once v3
 // shipped, because the flatness people complain about is a model choice.
+//
+// v4 (Sept 2026) is listed first but is not yet the default: v3 stays the
+// default until v4 has been compared with it on a full deck. ElevenLabs does
+// not document named stability levels for v4, so it gets the continuous slider.
 export const ELEVEN_MODELS = [
+  {
+    id: 'eleven_v4',
+    label: 'v4 — newest, expressive',
+    discreteStability: false,
+  },
+  {
+    id: 'eleven_v4_turbo',
+    label: 'v4 Turbo — faster v4',
+    discreteStability: false,
+  },
   {
     id: 'eleven_v3',
     label: 'v3 — most expressive (recommended)',

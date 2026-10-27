@@ -153,7 +153,8 @@ download button.
   labels and preview clip before the author commits to it. Text-to-speech
   accepts a library voice directly, with no add-to-my-voices step; ElevenLabs
   files it under the account on first use, so afterwards it is in the dropdown.
-- Models (`model_id`): `eleven_v3` (default, most expressive),
+- Models (`model_id`): `eleven_v4` (newest, expressive), `eleven_v4_turbo`
+  (faster v4), `eleven_v3` (default, most expressive),
   `eleven_multilingual_v2` (even, understated), `eleven_turbo_v2_5` (faster),
   `eleven_flash_v2_5` (fastest). v3 is the default because the v2 family's even
   delivery reads as flat over a full narrated deck — a model property, not an
@@ -162,9 +163,10 @@ download button.
   `stability`, `similarity_boost`, `style`, `use_speaker_boost`, `speed`.
   Defaults 0.5 / 0.75 / 0.0 / true / 1.0. Ranges are 0–1 except `speed` (0.7–1.2).
 - Stability is model-shaped: v3 defines three levels (0.0 Creative, 0.5 Natural,
-  1.0 Robust) and the picker offers exactly those; the v2 family takes a
-  continuous 0–1 slider. The API does not reject in-between values on v3, so the
-  backend passes settings through unmodified rather than snapping them.
+  1.0 Robust) and the picker offers exactly those; the v2 family and v4 take a
+  continuous 0–1 slider (ElevenLabs documents no named levels for v4).
+  The API does not reject in-between values on v3, so the backend
+  passes settings through unmodified rather than snapping them.
 
 ## Frontend
 
