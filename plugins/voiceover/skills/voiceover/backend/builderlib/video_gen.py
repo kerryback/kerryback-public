@@ -187,9 +187,14 @@ def generate(pid: str, progress=None) -> Path:
             ",format=yuv420p", ",format=yuvj420p"), "-frames:v", "1", "-q:v", "2", str(cover)],
         capture_output=True, text=True, check=True)
 
+    # -copyts: without it the concat demuxer shifts the whole timeline by the
+    # AAC encoder's priming delay (1024 samples, ~23 ms), and the muxer covers
+    # that gap with an empty edit at the head of the video track. QuickTime
+    # shows that empty edit as a black screen until play is pressed. With it,
+    # video starts at 0 and the priming stays in the audio track's own edit list.
     out = store.video_path(pid)
     subprocess.run(
-        [FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", str(list_file),
+        [FFMPEG, "-y", "-copyts", "-f", "concat", "-safe", "0", "-i", str(list_file),
          "-i", str(cover), "-map", "0", "-map", "1", "-c", "copy",
          "-disposition:v:1", "attached_pic", "-movflags", "+faststart",
          str(out)],
