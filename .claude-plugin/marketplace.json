@@ -3,7 +3,7 @@
   "owner": {
     "name": "Kerry Back"
   },
-  "description": "Public plugins: a reviewer for work Claude produced, a narrated-video builder for slide decks, a personal literature knowledge base, free financial and economic data, WRDS research data, two-stage DCF valuation, risk parity portfolios, and one-on-one tutors that coach a student to the answer.",
+  "description": "Public plugins: a reviewer for work Claude produced, a narrated-video builder for slide decks, a personal literature knowledge base, free financial and economic data, WRDS research data, two-stage DCF valuation, and risk parity portfolios.",
   "plugins": [
     {
       "name": "critique",
@@ -39,11 +39,6 @@
       "name": "risk-parity",
       "source": "./plugins/risk-parity",
       "description": "The risk parity (equal risk contribution) portfolio and the covariance matrix it needs, from historical returns, prices, or a covariance matrix: long-only weights in which every asset supplies the same share of portfolio variance, with each asset's risk share and inverse-volatility weight alongside."
-    },
-    {
-      "name": "tutor",
-      "source": "./plugins/tutor",
-      "description": "One-on-one tutoring skills. Each skill coaches a student through a piece of course material by handing them problems and diagnosing their answers rather than presenting worked solutions. Currently ships binomial option pricing (replicating portfolios, risk-neutral probabilities, backward induction, early exercise). Install once and every tutor in the collection is available as /tutor:<subject>."
     }
   ]
 }
