@@ -32,6 +32,16 @@ RETRY_STATUSES = {429, 500, 502, 503, 504}
 MAX_ATTEMPTS = 5
 
 
+class Cancelled(Exception):
+    """The author pressed Stop. Not a failure: clips already spoken stay in
+    the cache, so the next build picks up where this one left off."""
+
+
+def _check(cancel) -> None:
+    if cancel is not None and cancel.is_set():
+        raise Cancelled()
+
+
 def _retry_delay(response, attempt: int) -> float:
     """Seconds to wait before attempt+1.
 
@@ -91,13 +101,16 @@ def _voice_sig(voice_id: str, model: str, settings: dict) -> str:
 
 
 def synthesize(text: str, out_path: Path, voice_id: str, model: str,
-               settings: dict | None = None) -> None:
+               settings: dict | None = None, cancel=None) -> None:
     """Stream one ElevenLabs MP3 to out_path. Reads ELEVENLABS_API_KEY.
 
     `settings` is passed through to voice_settings as given. Note that v3 defines
     only three stability levels (0.0 / 0.5 / 1.0) while the v2-family models take
     a continuous 0–1; the API accepts in-between values on v3 without erroring, so
     nothing is snapped here — the picker offers the defined levels instead.
+
+    `cancel` (a threading.Event) is checked between attempts, never mid-stream:
+    a request already sent is billed, so it is allowed to land in the cache.
     """
     if not config.ELEVENLABS_API_KEY:
         raise RuntimeError(
@@ -141,20 +154,28 @@ def synthesize(text: str, out_path: Path, voice_id: str, model: str,
                 wait = _retry_delay(None, attempt)
             if attempt == MAX_ATTEMPTS - 1:
                 break
-            time.sleep(wait)
+            # Wait on the cancel flag rather than sleeping, so Stop doesn't sit
+            # out a backoff of up to 16 seconds.
+            if cancel is not None:
+                if cancel.wait(wait):
+                    raise Cancelled()
+            else:
+                time.sleep(wait)
     finally:
         tmp_path.unlink(missing_ok=True)
     raise RuntimeError(f"{last_error} (gave up after {MAX_ATTEMPTS} attempts)")
 
 
 def generate(slides: list, audio_dir: Path, voice_id: str, model: str,
-             settings: dict | None = None, progress=None) -> dict:
+             settings: dict | None = None, progress=None, cancel=None) -> dict:
     """(Re)synthesize audio for `slides`, write the manifest, prune the cache.
 
     `slides` is the deck's narration — {index, narration, ...} — in any order.
     Slides with no narration get no audio and are shown silently in the video.
 
     progress: optional callable(done, total, message).
+    cancel: optional threading.Event; once set, no new clip is started and
+    Cancelled is raised. The manifest is left alone and nothing is pruned.
     Returns {"total", "narrated", "synthesized", "skipped"}.
     """
     audio_dir.mkdir(parents=True, exist_ok=True)
@@ -195,7 +216,8 @@ def generate(slides: list, audio_dir: Path, voice_id: str, model: str,
     def _render(item):
         nonlocal done
         filename, text = item
-        synthesize(text, audio_dir / filename, voice_id, model, merged)
+        _check(cancel)
+        synthesize(text, audio_dir / filename, voice_id, model, merged, cancel)
         with lock:
             done += 1
             if progress:
@@ -205,10 +227,16 @@ def generate(slides: list, audio_dir: Path, voice_id: str, model: str,
         workers = max(1, min(config.TTS_CONCURRENCY, len(tasks)))
         with ThreadPoolExecutor(max_workers=workers) as ex:
             futures = [ex.submit(_render, item) for item in tasks.items()]
-            for f in as_completed(futures):
-                exc = f.exception()
-                if exc:
-                    raise exc
+            try:
+                for f in as_completed(futures):
+                    exc = f.exception()
+                    if exc:
+                        raise exc
+            except BaseException:
+                # Drop queued clips; the `with` exit still waits for the ones
+                # already at ElevenLabs, so they finish and are cached.
+                ex.shutdown(wait=False, cancel_futures=True)
+                raise
 
     (audio_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2), encoding="utf-8")

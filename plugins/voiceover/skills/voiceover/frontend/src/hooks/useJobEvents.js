@@ -6,13 +6,15 @@ import { isFailedState } from '../constants'
 //
 // The stream emits `{stage, state, done, total, message}`. We surface the
 // latest event as `progress`, and settle (closing the stream + firing a
-// callback) when the state reaches the stage's success or failure terminal.
+// callback) when the state reaches the stage's success, failure or cancelled
+// terminal.
 //
 //   const { progress, running, start, stop } = useJobEvents()
 //   start(projectId, {
 //     terminals: JOB_TERMINALS.draft,   // {success, failure}
 //     onDone: (finalEvent) => {...},
 //     onError: (err, finalEvent) => {...},
+//     onCancel: (finalEvent) => {...},
 //   })
 export function useJobEvents() {
   const [progress, setProgress] = useState(null)
@@ -29,11 +31,11 @@ export function useJobEvents() {
   }, [])
 
   const start = useCallback(
-    (id, { terminals, onDone, onError } = {}) => {
+    (id, { terminals, onDone, onError, onCancel } = {}) => {
       stop()
       setProgress(null)
       setRunning(true)
-      cbRef.current = { terminals, onDone, onError }
+      cbRef.current = { terminals, onDone, onError, onCancel }
 
       const es = new EventSource(eventsUrl(id))
       esRef.current = es
@@ -47,9 +49,17 @@ export function useJobEvents() {
         }
         setProgress(data)
 
-        const { terminals: t, onDone: done, onError: fail } = cbRef.current
+        const {
+          terminals: t,
+          onDone: done,
+          onError: fail,
+          onCancel: cancelled,
+        } = cbRef.current
         const state = data.state
-        if (isFailedState(state) || (t && state === t.failure)) {
+        if (t?.cancelled && state === t.cancelled) {
+          stop()
+          cancelled?.(data)
+        } else if (isFailedState(state) || (t && state === t.failure)) {
           stop()
           fail?.(new Error(data.message || 'The job failed.'), data)
         } else if (t && state === t.success) {

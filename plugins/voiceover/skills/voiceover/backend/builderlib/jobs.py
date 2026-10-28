@@ -122,12 +122,47 @@ def _with_text(fingerprints: list, slides: dict) -> list:
 # --------------------------------------------------------------------------- #
 # Build — synthesize audio, render the video and transcript
 # --------------------------------------------------------------------------- #
+# One flag per deck, set by Stop. A fresh one per build, so a stale Stop can't
+# cancel the next run.
+_cancel: dict = {}
+
+
 def start_build(pid: str):
+    _cancel[pid] = threading.Event()
     _run_bg(_build, pid)
 
 
+def cancel_build(pid: str) -> bool:
+    """Ask the running build to stop. False when there is none to stop."""
+    flag = _cancel.get(pid)
+    if flag is None or flag.is_set():
+        return False
+    flag.set()
+    return True
+
+
+def is_building(pid: str) -> bool:
+    return pid in _cancel
+
+
 def _build(pid: str):
+    # The state to return to on Stop. A stopped run never reaches the final
+    # concat, so a previous video is still on disk and still the deck's video.
+    before = (db.get_project(pid) or {}).get("state")
+    resume = "built" if before == "built" else "ready"
     store.set_state(pid, "building", log="")
+    try:
+        _build_steps(pid, _cancel[pid])
+    except audio_gen.Cancelled:
+        store.set_state(pid, resume, log="")
+        events.emit(pid, "build", "cancelled", 0, 0,
+                    "Stopped. Clips already spoken are kept — the next run "
+                    "picks up where this one left off.")
+    finally:
+        _cancel.pop(pid, None)
+
+
+def _build_steps(pid: str, cancel):
     slides = store.read_narration(pid)["slides"]
     if not any((s.get("narration") or "").strip() for s in slides):
         raise RuntimeError(
@@ -147,7 +182,7 @@ def _build(pid: str):
     stats = audio_gen.generate(
         slides, store.audio_dir(pid), cfg["voice_id"], cfg["model"],
         {k: cfg[k] for k in audio_gen.VOICE_SETTING_KEYS if k in cfg},
-        progress=aprog)
+        progress=aprog, cancel=cancel)
 
     def vprog(done, total, msg):
         events.emit(pid, "build", "building", 1, 2,
@@ -155,7 +190,7 @@ def _build(pid: str):
 
     events.emit(pid, "build", "building", 1, 2, "Rendering video")
     store.video_path(pid).parent.mkdir(parents=True, exist_ok=True)
-    video_gen.generate(pid, progress=vprog)
+    video_gen.generate(pid, progress=vprog, cancel=cancel)
 
     _write_transcript(pid)
     _announce_outputs(pid)

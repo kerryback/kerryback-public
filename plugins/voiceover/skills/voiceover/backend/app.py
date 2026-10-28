@@ -408,8 +408,23 @@ async def build(pid: str):
         raise HTTPException(409, "The deck is still loading.")
     if proj["state"] == "load_failed":
         raise HTTPException(409, "The deck could not be loaded — fix that first.")
+    # The live job, not the saved state: a server stopped mid-build leaves
+    # "building" on disk with nothing running.
+    if jobs.is_building(pid):
+        raise HTTPException(409, "A build is already running.")
     jobs.start_build(pid)
     return {"started": True}
+
+
+@app.post("/api/projects/{pid}/build/cancel", status_code=202)
+async def cancel_build(pid: str):
+    """Stop the running build. It ends at the next clip or segment boundary and
+    the deck returns to its previous state (see jobs._build)."""
+    if not db.get_project(pid):
+        raise HTTPException(404, "not found")
+    if not jobs.cancel_build(pid):
+        raise HTTPException(409, "No build is running.")
+    return {"stopping": True}
 
 
 @app.get("/api/projects/{pid}/events")

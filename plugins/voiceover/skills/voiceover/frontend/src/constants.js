@@ -83,10 +83,10 @@ export const STATE_LABELS = {
   built: ['bg-green-50 text-green-700', 'Video ready'],
 }
 
-// Terminal states per job stage: success and failure.
+// Terminal states per job stage: success, failure, and (build only) Stop.
 export const JOB_TERMINALS = {
   load: { success: 'ready', failure: 'load_failed' },
-  build: { success: 'built', failure: 'building_failed' },
+  build: { success: 'built', failure: 'building_failed', cancelled: 'cancelled' },
 }
 
 export const isFailedState = (state) =>

@@ -6,6 +6,7 @@ import {
   PenLine,
   RotateCw,
   Sliders,
+  Square,
   Upload,
 } from 'lucide-react'
 import { api } from './api'
@@ -56,6 +57,9 @@ function Shell() {
   // it are read live at render time rather than frozen at the click.
   const [blocked, setBlocked] = useState(false)
   const { progress, running, start } = useJobEvents()
+  // Stop was pressed and the build is winding down: clips already sent to
+  // ElevenLabs are allowed to finish, which can take a few seconds.
+  const [stopping, setStopping] = useState(false)
   const toast = useToast()
 
   const refresh = useCallback(async () => {
@@ -99,6 +103,7 @@ function Shell() {
         return
       }
       setBlocked(null)
+      setStopping(false)
       await api.build(project.id)
       setScreen('preview')
       start(project.id, {
@@ -108,7 +113,13 @@ function Shell() {
           await refresh()
         },
         onError: async (err, evt) => {
+          setStopping(false)
           toast.error(evt?.message || err.message)
+          await refresh()
+        },
+        onCancel: async (evt) => {
+          setStopping(false)
+          toast.success(evt?.message || 'Generation stopped.')
           await refresh()
         },
       })
@@ -116,6 +127,17 @@ function Shell() {
       toast.error(err.message)
     }
   }, [project, refresh, start, toast])
+
+  const stopBuild = useCallback(async () => {
+    if (!project) return
+    setStopping(true)
+    try {
+      await api.cancelBuild(project.id)
+    } catch (err) {
+      setStopping(false)
+      toast.error(err.message)
+    }
+  }, [project, toast])
 
   // Generating a deck whose slides have no script spends ElevenLabs quota on a
   // video of silence, and the only sign is a transcript full of "(silent)" after
@@ -151,6 +173,9 @@ function Shell() {
   }
 
   const busy = running || project?.state === 'loading'
+  // project.state covers a reload mid-build, when the event stream is gone but
+  // the job is still running on the server.
+  const generating = running || project?.state === 'building'
   const built = project?.state === 'built'
 
   return (
@@ -160,7 +185,9 @@ function Shell() {
         screen={screen}
         onScreen={setScreen}
         onGenerate={generate}
-        generating={running}
+        onStop={stopBuild}
+        generating={generating}
+        stopping={stopping}
         busy={busy}
         built={built}
       />
@@ -272,7 +299,9 @@ function TopBar({
   screen,
   onScreen,
   onGenerate,
+  onStop,
   generating,
+  stopping,
   busy,
   built,
 }) {
@@ -304,13 +333,33 @@ function TopBar({
             const Icon = s.icon
             return (
               <span key={s.key} className="flex items-center gap-1">
-                {s.after === 'generate' && (
+                {/* While a run is going, Generate becomes Stop, in the same
+                    place: that is where the eye goes on realizing a slide
+                    still needs changing. */}
+                {s.after === 'generate' && generating && (
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    className="mx-1"
+                    onClick={onStop}
+                    loading={stopping}
+                    title="Stop generating. Clips already spoken are kept, so the next run picks up where this one left off."
+                  >
+                    {stopping ? (
+                      'Stopping…'
+                    ) : (
+                      <>
+                        <Square className="h-3.5 w-3.5" /> Stop
+                      </>
+                    )}
+                  </Button>
+                )}
+                {s.after === 'generate' && !generating && (
                   <Button
                     variant={built ? 'amber' : 'primary'}
                     size="sm"
                     className="mx-1"
                     onClick={onGenerate}
-                    loading={generating}
                     disabled={busy || !project?.slides?.length}
                     title="Speak the narration and render the video. Only slides whose narration changed are spoken again."
                   >

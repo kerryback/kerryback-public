@@ -54,6 +54,9 @@ export const api = {
 
   // ---- jobs ----
   build: (id) => request(`api/projects/${id}/build`, { method: 'POST' }),
+  // Stop a running build. Clips already spoken stay cached for the next run.
+  cancelBuild: (id) =>
+    request(`api/projects/${id}/build/cancel`, { method: 'POST' }),
 
   // ---- narration ----
   // The script lives in the app. Claude writes it in bulk; the author edits

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import imageio_ffmpeg
 
-from . import config, store
+from . import audio_gen, config, store
 
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 
@@ -109,11 +109,15 @@ def _encode_silent(png: Path, out: Path, vscale: str) -> None:
     subprocess.run(cmd, capture_output=True, text=True, check=True)
 
 
-def generate(pid: str, progress=None) -> Path:
+def generate(pid: str, progress=None, cancel=None) -> Path:
     """Render <project>/video.mp4 and return its path.
 
     Slide index i uses slides/slide-{i+1:03d}.png and the audio file the manifest
     maps to index i (silent if none). Raises if there are no slide images.
+
+    `cancel` (a threading.Event) is checked between segments and before the
+    final concat. The previous video is only overwritten by that concat, so a
+    stopped render leaves it untouched.
     """
     slides = sorted(store.read_narration(pid)["slides"], key=lambda s: s["index"])
     slides_dir = store.slides_dir(pid)
@@ -154,6 +158,7 @@ def generate(pid: str, progress=None) -> Path:
 
     def _one(item):
         i, png, mp3 = item
+        audio_gen._check(cancel)
         seg = work / f"seg-{i:03d}.mp4"
         if mp3:
             _encode_narrated(png, mp3, seg, vscale)
@@ -165,12 +170,17 @@ def generate(pid: str, progress=None) -> Path:
     workers = max(1, min(config.VIDEO_CONCURRENCY, total))
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = [pool.submit(_one, item) for item in jobs]
-        for fut in as_completed(futures):
-            i, seg = fut.result()
-            segs[i] = seg
-            done += 1
-            if progress:
-                progress(done, total, "Rendering video")
+        try:
+            for fut in as_completed(futures):
+                i, seg = fut.result()
+                segs[i] = seg
+                done += 1
+                if progress:
+                    progress(done, total, "Rendering video")
+        except BaseException:
+            pool.shutdown(wait=False, cancel_futures=True)
+            raise
+    audio_gen._check(cancel)
 
     # Concatenate in slide order (identical codecs/params -> stream copy).
     ordered = [segs[i] for i, _, _ in jobs]

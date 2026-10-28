@@ -55,7 +55,8 @@ by scanning them and reading each `meta.json`. There is no database.
 
 `loading → ready → building → built`, plus `load_failed | building_failed`, each
 carrying a `log`. `ready` means the page images and the narration are in hand.
-`built` means the MP4 is ready.
+`built` means the MP4 is ready. A stopped build is not a state: the deck goes
+back to the one it had before (see "Stopping a build").
 
 Staleness is computed, not stored: `store.build_signature` shas every slide's
 narration plus the voice settings; `_build` stamps it into `build_sig`;
@@ -117,7 +118,8 @@ that lands on a different slide brings its audio with it.
 - `POST /api/tts/key` `{api_key}` → validates against ElevenLabs, persists to `~/.voiceover/.env` (outside the skill dir, so a plugin update can't wipe it), updates the live value
 - `GET  /api/tts/voices` → `{configured, voices:[{voice_id,name,category}]}`
 - `GET  /api/tts/voices/{voice_id}` → `{voice_id,name,category,preview_url,labels[]}` (resolve one id — the account first, then the Voice Library; 404 when no such voice)
-- `POST /api/projects/{id}/build` → 202; TTS + video. 409 while loading or after a failed load.
+- `POST /api/projects/{id}/build` → 202; TTS + video. 409 while loading, after a failed load, or while a build is running.
+- `POST /api/projects/{id}/build/cancel` → 202 `{stopping}`; Stop. 409 when no build is running. The job ends with a `cancelled` event and the deck returns to `built` (if it had a video) or `ready`.
 - `GET  /api/projects/{id}/events` → SSE stream of `{stage,state,done,total,message}` for the active job
 - `GET  /api/projects/{id}/slides/{file}` → PNG (slide image)
 - `GET  /api/projects/{id}/video` → the rendered MP4 (served inline, Range-aware; 404 until built) — for the in-app player only
@@ -221,6 +223,17 @@ download button.
 4. Outputs are already in place: both were rendered straight to
    `VOICEOVER_OUTPUT_DIR`; `jobs._announce_outputs` just reports where.
 5. Stamp `build_sig` so later edits show as stale.
+
+### Stopping a build
+
+Stop (`POST …/build/cancel`) sets a per-build flag that both steps check. Audio
+starts no new clip once it is set, but a clip already sent to ElevenLabs is
+allowed to finish and land in the cache — it is billed either way, and the next
+build then reuses it. Retry backoff waits on the flag, so Stop never sits out a
+backoff. Video checks between segments and before the final concat, which is
+the only step that writes the MP4; so a stopped run leaves the previous video,
+manifest and transcript untouched. In the UI, Generate turns into Stop while a
+run is going.
 
 Nothing is rendered from source — no Quarto, no LibreOffice, no headless browser.
 The slide images come from the author's PDF.
