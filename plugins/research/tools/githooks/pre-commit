@@ -1,0 +1,27 @@
+#!/bin/sh
+# Keep the provenance diagrams honest.
+#
+# If this commit touches any script under workspaces/, regenerate that author's
+# DAG and include it in the SAME commit. A diagram that lags the code is worse
+# than none — it reads as current and is not.
+#
+# Enable once per clone (it is not automatic, git only runs hooks it is told to):
+#     git config core.hooksPath tools/githooks
+#
+# Skip for one commit with:  git commit --no-verify
+
+changed=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^workspaces/.*\.py$' || true)
+[ -z "$changed" ] && exit 0
+
+python3 -m tools.provenance --write >/dev/null 2>&1 || {
+    echo "pre-commit: provenance regeneration failed — commit anyway with --no-verify" >&2
+    exit 1
+}
+
+author=$(python3 -m tools.runid --author 2>/dev/null)
+if [ -n "$author" ] && [ -d "workspaces/$author/dag" ]; then
+    git add "workspaces/$author/dag"
+    n=$(git diff --cached --name-only -- "workspaces/$author/dag" | wc -l | tr -d ' ')
+    [ "$n" -gt 0 ] && echo "pre-commit: refreshed $n provenance diagram(s)"
+fi
+exit 0

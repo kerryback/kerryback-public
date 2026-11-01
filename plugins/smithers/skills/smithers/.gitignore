@@ -1,0 +1,9 @@
+# Personal state and OAuth secrets live in ~/.smithers, never here. Belt and
+# braces in case someone runs from this directory.
+credentials.json
+token_*.pickle
+tasks.json
+drafts.json
+briefing.json
+__pycache__/
+*.pyc

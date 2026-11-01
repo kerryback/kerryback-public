@@ -1,0 +1,14 @@
+# @@PROJECT@@ — Python dependencies
+#
+#   python3 -m venv .venv
+#   .venv/bin/pip install -r requirements.txt
+#
+# Pin exactly anything that touches a reported number: a different version can
+# move a result, and then two builds disagree for a reason that has nothing to do
+# with either build. Give a floor to tooling that does not.
+#
+# Moving a pin is a method-spec change and goes through the same gate.
+
+numpy
+pandas
+pyarrow

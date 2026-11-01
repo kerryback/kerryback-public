@@ -1,0 +1,30 @@
+# Commit the curated memory; ignore raw model traffic and machine-local state.
+#
+# From logs/, one thing goes to git:
+#   runs.jsonl    the run records — provenance for every reported number
+#
+# Everything else here is working material, not memory. The briefs sent to each
+# debate seat and the full model responses are both inputs to a decision, and a
+# coauthor asking "did we ever explore X" wants the decision and the reason for
+# it, not the prompts that produced it. That answer belongs in the state's
+# changelog, written when the decision is made — see the debate section of
+# CLAUDE.md. Raw material nobody curated reads as a record and is not one.
+#
+# The style-capture buffer lands here too — style-observations.jsonl,
+# style-prompts.json, style-watermark — and stays local for the same reason,
+# plus one of its own: those are the passages one coauthor was corrected on.
+# What gets shared is the rule someone accepted, written into writing-guide.md
+# at the repo root, which IS committed.
+#
+# Note the rule shape: git cannot re-include a file whose parent DIRECTORY is
+# ignored, so this must be `*/logs/*` plus a negation, never `*/logs/`.
+*/logs/*
+!*/logs/runs.jsonl
+
+# Per-author runtime state: machine-local, and meaningless to anyone else.
+# `python` in particular holds an absolute venv path.
+*/run
+*/python
+
+# machine-local: this clone has been through onboarding
+*/onboarded

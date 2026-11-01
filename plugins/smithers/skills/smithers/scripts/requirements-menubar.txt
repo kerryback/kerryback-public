@@ -1,0 +1,6 @@
+# Optional, macOS only: extras for the menu-bar mode (scripts/menubar.py).
+# The app itself needs none of this — skill_launch.py opens it in a browser or
+# an editor tab. Install into the same environment that runs menubar.py:
+#   ~/.smithers/venv/bin/pip install -r scripts/requirements-menubar.txt
+rumps
+pywebview

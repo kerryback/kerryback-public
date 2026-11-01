@@ -1,0 +1,8 @@
+# mcp 2.0 removed mcp.server.fastmcp and the streamablehttp_client import
+# this code uses; stay on the 1.x API until the connector is migrated.
+mcp>=1.28,<2
+uvicorn[standard]
+google-auth
+google-auth-oauthlib
+google-api-python-client
+python-dotenv

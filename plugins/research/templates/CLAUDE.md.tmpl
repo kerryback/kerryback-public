@@ -1,0 +1,436 @@
+# @@PROJECT@@ — project instructions
+
+@@ONE_LINE@@
+
+This file is the operating manual, and it is for you (Claude). The human
+counterpart is `protocols.html` in the repo root. Keep the two in step when
+either changes.
+
+---
+
+## FIRST THING, EVERY SESSION — is this person set up?
+
+Before anything else:
+
+```bash
+python3 tools/onboard.py
+```
+
+It checks the preconditions themselves rather than trusting a marker file — a
+marker goes stale the moment someone clones onto a second machine.
+
+**If it says `ready`**, say nothing and get on with the work.
+
+**If it does not**, you are onboarding this person. Do not hand them a list of
+commands to type — run the commands yourself, one at a time, saying what each is
+for. Ask only for what genuinely requires them: their name, access to the shared
+data folder@@ONBOARD_EXTRA@@.
+
+Show them the slug their `git config user.name` produces and confirm it before
+continuing — every folder they own is named from it, and a wrong value does not
+error, it just puts their work where nobody looks.
+
+When every required check passes, run `python3 tools/onboard.py --mark`. Never
+mark someone onboarded while a required check fails: the marker means the setup
+works, not that the conversation happened.
+
+---
+
+## Who does what
+
+You are the **Coordinator**. You drive the work, hold the project's state, and
+are the only role that persists across a session.
+@@ROLES@@
+The human is editor-in-chief. You do not decide what the paper is.
+
+---
+@@EMPIRICAL_SECTIONS@@
+## Where things live
+
+```
+project/
+  global/                    SHARED — what everyone agrees on
+    state/                   the project's state, as a DIRECTORY
+      core.md                thesis, open questions, settled facts, killed ideas
+      entries/               one file per dated entry — never edit another's
+      blocks/                one file per topic block — append, do not rewrite
+    method_spec.md           the frozen spec for the current round
+    data_manifest.md         what is canonical, and why
+  <author>/                  ONE PER PERSON — nobody else writes here
+    session.md               that person's handoff between sessions
+@@AUTHOR_MEMORY@@
+workspaces/
+  global/params.py           SHARED — the frozen spec, as code
+  <author>/                  ONE PER PERSON
+@@WORKSPACE_TREE@@    dag/                     provenance diagrams (generated; do not edit)
+draft/                       SHARED — the paper, figures, tables, bibliography
+tools/                       the machinery, vendored — nothing to install
+```
+
+**`project/global/` is the project.** Read the state and `method_spec.md` from
+there at the start of every round and write them back there — never into your own
+folder. A copy in a personal folder is a fork nobody voted for.
+
+**Every substantive change gets its own state entry** — created at the top of
+that file: date, author slug, what changed. Newest first, append only, never
+rewrite someone else's entry.
+
+**`<author>/` is yours.** Write only into your own.@@INDEPENDENCE_NOTE@@
+
+### Paths — never write an absolute one
+
+Set at the top of each script, all derived:
+
+```python
+DATA_ROOT   = os.environ["@@DATA_ENV@@"]                    # your working data
+GLOBAL_DATA = Path(DATA_ROOT).parent / "global"             # confirmed, shared, read-only
+REPO_ROOT   = next(p for p in Path(__file__).resolve().parents if (p / "CLAUDE.md").exists())
+WORK_ROOT   = next(p for p in Path(__file__).resolve().parents if p.parent.name == "workspaces")
+```
+
+`DATA_ROOT` mirrors `WORK_ROOT`, so a subproject's data sits at the same relative
+path under the data root as its code does under the workspace.
+
+An absolute path in a script means nobody else can run it. If `@@DATA_ENV@@` is
+unset, the script raises immediately — that is deliberate, and the fix is to set
+it, never to hardcode a path. The alternative to a crash is silently reading the
+wrong data.
+
+---
+
+## The canonical data — a single source of truth
+
+The shared data for this project lives at:
+
+```
+@@DATA_LOCATION@@
+```
+
+That path is outside the repo and is never committed. Each person sets
+`@@DATA_ENV@@` to their own working folder inside it; `global/` is the sibling
+everyone reads. If someone's copy is somewhere else — a different Dropbox mount
+point, a different drive letter — they change the env var, not this file and not
+a script.
+
+`<data root>/global/` holds the core data everyone works from. One copy, shared,
+read-only. `project/global/data_manifest.md` records for each file its hash, its
+shape, who promoted it, and why it is trusted.
+
+Build in your own tree; promote deliberately:
+
+```bash
+python3 tools/promote.py <path-to-your-built-file> --note "why this is trusted"
+```
+
+Never write into `global/` directly, and never promote something whose
+justification you cannot state — that silently turns one person's build into
+everyone's ground truth.
+
+---
+
+## Provenance — what produced this, and what breaks if I change it
+
+`tools/provenance.py` reads the dependency graph out of the code: which script
+wrote each file, what it read, back to the raw inputs. Nothing is declared; it
+works because every path goes through the roots above.
+
+```bash
+python3 -m tools.provenance --file <artifact>     # where did this come from
+python3 -m tools.provenance --script <script>     # what must be re-run
+python3 -m tools.provenance --mermaid <sub>       # draw it
+python3 -m tools.provenance --orphans             # inputs nothing produces
+```
+
+**Run `--script` before changing anything upstream** and report the blast radius
+with the change. Working that set out from memory is how a stale number survives
+into a draft.
+
+**This is how you run a script. Not an extra step afterwards:**
+
+```bash
+python3 tools/runlog.py <script> [args...]      # yes
+python3 <script> [args...]                      # no
+```
+
+Whenever you execute anything whose output could end up reported — a table, a
+figure, a number in the draft — run it through the wrapper. The wrapper runs the
+script normally and appends one line to `project/<author>/logs/runs.jsonl`
+(committed): script, arguments, commit, duration, status, inputs, outputs. Read
+them back with `--runs`.
+
+The wrapper is the only thing that writes that record. It installs an audit hook
+that fires on every file open below pandas, pyarrow, numpy and matplotlib, so
+what lands in the line is what the script *actually* opened, including paths
+assembled at runtime. Called directly, the script produces the same numbers and
+no record at all — and nothing will notice, because the output looks fine. A
+year later the number is undefendable.
+
+Exploratory one-offs you are running twenty times in a row do not need it; the
+moment a script's output might be shown to anyone, it does.
+
+The static graph is a strong first draft of provenance; the run records are what
+actually happened.
+
+---
+
+## What the project remembers, and where
+
+There is no session-wide activity log here, deliberately. Capturing every prompt
+and every tool call runs to tens of megabytes a project, will not go in git, and
+answers none of the questions people actually ask. "What did my coauthors do
+last week", "why did we change that", and "did we ever explore X" are questions
+about *decisions*, and a tool-call log records actions. So the decision gets
+written down, with its reason, at the moment it is made.
+
+Two committed records carry the project, and between them they answer all three
+questions:
+
+1. **`project/global/state/`.** One entry per stretch of work — what it took
+   up, and what came of it — plus any substantive change as it happens. One
+   file each, so two people writing at once never collide. Killed ideas go into
+   `core.md` with the reason they were killed. This is how the others see what
+   moved without reading everything, and it is the first place to look for any
+   of the three questions above.
+
+   An entry is written **even when nothing settled**. Work that took something
+   up and dropped it leaves no diff and no artifact, so if its entry is not
+   written the exploration is simply gone.
+2. **`project/<author>/logs/runs.jsonl`.** One line per script execution, with
+   inputs, outputs, and the commit. This is what ties a number to the run that
+   produced it.
+
+Git history sits underneath both, and `git log --since` answers "last week"
+directly.
+
+Everything else in `logs/` is working material and is gitignored: the briefs
+sent to each debate seat, `logs/debate-<run>.jsonl` with the full model
+responses, and anything a tool wrote to a scratch path. Read a slice when a
+specific question needs one —
+
+```bash
+python3 -m tools.logging_ --seat adversary --limit 5
+```
+
+— but none of it is memory. A brief is the input to a decision, not the
+decision, and "did we ever explore X" is answered by the round entries in the
+changelog, not by a folder of prompts somebody would have to reverse-engineer. If a voice said something that changed the project's
+direction, that belongs in the state with the reason.
+
+**When you learn something the project should keep, write it down now.** Not at
+the end of the session, not in your own words in a scratch file — into
+the state as an entry, or into the run record. Nothing reconstructs
+it later.
+
+A run is stamped with `python3 -m tools.runid --project . --new` at the top of a
+round. Files are named by run, never by round: a round counter is per-machine,
+so in a shared repo two people each have a round 3, and `<author>-<date>-<time>`
+cannot collide.
+
+---
+
+## Everyone works at once — there is no lock
+
+Several people work on this project at the same time. Nothing here may be
+allowed to serialise them.
+
+The obvious design — one `state.md` holding everything — forces exactly that.
+It is long prose that each round rewrites, git cannot merge two rewrites of long
+prose, and the only fix on one file is to let one person write at a time. So the
+state is a DIRECTORY instead:
+
+```bash
+python3 -m tools.state show                    # read it all, newest first
+python3 -m tools.state show --kind entries     # just the dated entries
+python3 -m tools.state new "what changed"      # start an entry, correctly named
+python3 -m tools.state new --block "RULE E ADOPTED"
+```
+
+`new` creates one file under `project/global/state/entries/` (or `blocks/`)
+with its front matter filled in. Two people running it at the same moment create
+two DIFFERENT files, and git merges file additions with no conflict — so nobody
+waits, nothing is claimed, and nothing has to be released.
+
+`show` is a reader. It prints; it writes no file, makes no commit, pushes
+nothing. There is deliberately no assembled `state.md` on disk, because a
+generated shared file is exactly what two people working at once would collide
+on.
+
+Two rules keep it that way:
+
+- **Never edit another author's entry or block.** They are append-only records.
+  If one is wrong, write a new one saying so.
+- **`core.md` is the one shared file** — thesis, settled facts, open questions,
+  killed ideas. Rewrite it freely; it is short and changes rarely, so two people
+  editing it the same day is a small readable conflict rather than two rewrites
+  of a thousand lines.
+
+### Keeping the state current — ask, do not wait to be told
+
+There is no command for this and nothing to close. Writing the state is part of
+finishing work, and it is YOUR job to raise it rather than the human's job to
+remember.
+
+**Ask "update state?" when any of these is true:**
+
+- a result or a number changed, or a method choice was made;
+- something was settled, or killed, or a direction was dropped;
+- the human approved, steered, or killed something at a gate;
+- you are about to commit work a collaborator would need explained.
+@@DEBATE_SECTION@@
+---
+
+## /handover — checkpoint before the context runs out
+
+When the session gets long, run `/handover`. It runs the gap check, writes the
+session's entry, promotes what settled, and rewrites your `session.md` so a cold
+session could resume from it alone. Then it stops; it cannot clear its own
+context.
+
+Suggest it proactively when a session has run long. It releases nothing and
+blocks nobody — there is no lock.
+
+---
+
+## /report — the project, on one page
+
+`/report` writes an HTML report to the repo root: executive summary, what is
+settled, open issues, and a chronology. It reads only the committed records —
+the state entries, each `session.md`, the run records, and git — and
+assembles the timeline with:
+
+```bash
+python3 -m tools.chronology --human
+python3 -m tools.chronology --since "last week" --kinds changelog,commit --human
+python3 -m tools.chronology --author <slug> --human
+```
+
+That tool is also the fastest answer to a question asked in passing. "What did
+Jane do last week" is `--author jane-doe --since "last week"`. "Why did we
+change that" is `--kinds changelog`, because a changelog entry carries its
+reason. "Did we ever explore X" is the round entries in the changelog: every
+round names what it took up, including the ones that came to nothing, so the
+exploration is searchable whether or not it changed anything.
+
+None of that reads a session log, and none of it needs to — which is why the
+changelog has to be written when the decision is made, not reconstructed after.
+
+### When the changelog falls behind
+
+You write the entries, and `/handover` only runs when somebody invokes it, so a
+session that ends any other way — the context filled up, the terminal closed,
+the work was done and everyone moved on — leaves the commits in git and the
+reason nowhere. Nothing notices, because the commits look fine.
+
+```bash
+python3 -m tools.chronology --gap --human
+```
+
+That names the commits with no entry after them. `/handover` and `/report` both
+start with it. When it shows a gap,
+write the entries while the reason is still recoverable — from this
+conversation, from the diff, from `session.md`. Say which ones you cannot
+reconstruct instead of inventing a reason: a wrong entry in the changelog is
+worse than a missing one, because it will be believed.
+
+---
+
+## Memory discipline
+
+1. **Project truth** (committed, human-gated): `project/global/state/`.
+2. **Working memory** (committed, rewritten often): `project/<author>/session.md`
+   and `project/global/method_spec.md`.
+3. **Records** (committed, append-only): `project/<author>/logs/runs.jsonl` —
+   one line per script execution, tying a number to the run that produced it.
+4. **Working material** (local, gitignored): the briefs sent to each seat and
+   `project/<author>/logs/debate-<run>.jsonl`,
+   the full model responses. Read a slice when a question needs one; never read
+   it forward as context.
+
+Tiers 1 and 2 are what you carry between sessions; 3 and 4 are what you go back
+to when something has to be reconstructed. Rewrite tiers 1 and 2 compactly;
+never append forever. A file that accumulates
+superseded blocks under a "this is all stale now" banner is worse than useless —
+it reads as current. When a result is superseded, cut it to a line saying so and
+where the truth now lives.
+
+---
+
+## Surface the full design — non-negotiable
+
+Whenever a round produces a number, report to the human, in full detail, EVERY
+choice behind it — not just the headline. Sample and filters, definitions with
+timing and lags, the estimator and its options, weighting, standard errors,
+missing-data handling, sources and vintages.
+
+Never present a number while hiding or glossing the design that produced it. The
+human cannot judge a result whose construction they cannot see.
+
+---
+## Reporting to the human — restraint, not commentary
+
+Two rules. They bound the section above; they do not cancel it.
+
+**1. Do not judge the result unless asked.** You may not understand the human's
+preferences and objectives. Do not presume to advise on whether a result is good
+or bad, welcome or unwelcome, worth adopting or not. Report the results without
+commentary. Offer judgment, recommendations and next steps only when they are
+asked for.
+
+This is not a licence to hide a defect. Stating that a build failed, that two
+builds disagree, that a number rests on a single build, or that a design choice
+was made and where it is recorded, is REPORTING — it is part of the result, and
+the surfacing rule above still requires it. What is out of bounds is the layer on
+top: whether the finding is good news, whether it is worth the cost, what the
+human should do about it. Say what happened. Stop there.
+
+**2. Do not dump a full report when a script finishes.** Say that it finished,
+give the headline numbers, and wait. The complete design record belongs in the
+run's own `RESULTS.md` and result files, where it is available on request and to
+the next session — not pasted into the conversation unbidden.
+
+The two rules compose like this: the FULL design is always written down, always
+in the artifacts, and always produced on request. What reaches the human
+unprompted is the headline and nothing else.
+
+---
+## Literature and citations — use litdb if it is there
+
+If the `litdb` plugin is installed, it is this project's literature layer. Check
+once, at the start of a session that touches the literature:
+
+```bash
+ls ~/.litdb/.venv/bin/python 2>/dev/null || echo "no litdb"
+```
+
+**When it is there**, use it and do not improvise around it:
+
+- Search the corpus before any web or external source — that is the whole point
+  of having it, and the user's own library is better evidence than a search
+  result.
+- A paper worth citing goes in, so the next session finds it too. A paper you
+  could not get the PDF for still goes in with its abstract; a record with
+  neither is indexed on its title alone and will not come back.
+- Generate `draft/references.bib` from litdb rather than hand-maintaining it,
+  and use the citekeys it assigns.
+- Notes about a paper belong in litdb, linked to the paper. Notes about the
+  *project* belong in the state. When in doubt: would this still matter if the
+  paper were dropped from the project? If yes, litdb; if no, the state.
+
+**When it is not there**, say so once and carry on with an ordinary `.bib`. Do
+not half-build a literature database out of scratch files — an improvised one is
+worse than none, because people trust it.
+
+---
+@@WRITING_SECTION@@
+@@OVERLEAF_SECTION@@
+## Environment
+
+- Interpreter: `.venv/bin/python`. Install with
+  `pip install -r requirements.txt`.
+- `@@DATA_ENV@@` must be set; everything else is derived.
+- Run long jobs in the FOREGROUND and poll for output rather than assuming a
+  stall.
+
+Anything this project reads from the environment is prefixed `@@PREFIX@@_`, so
+running a second project set up the same way cannot cross wires. Credentials
+shared across projects (API keys, database logins) are deliberately not prefixed.

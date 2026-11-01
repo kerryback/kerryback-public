@@ -1,0 +1,16 @@
+{
+  "name": "research",
+  "version": "0.7.1",
+  "description": "Set up a research repository several people and their Claudes can share without tripping over each other: per-author folders, portable paths derived rather than configured, one canonical dataset with recorded promotion, provenance read out of the code, project state kept as a directory of one-file-per-entry records so several coauthors write at the same time with no locking and nothing to claim or release, and a generated CLAUDE.md that makes the whole thing self-explaining. Optional two-build (analyst/replicator) protocol for empirical work, an OpenRouter debate panel, and an Overleaf mirror of the paper directory via the git bridge for teams where only some coauthors use Overleaf. Works on a new project or an existing one that grew organically. Ships a vendored writing guide -- economics section formulas and style rules merged with the prose standards that keep drafts from reading as machine-written -- binding for everything in draft/, and it learns: hooks capture the prose corrections you give, /style-learn turns them into rules you accept one at a time and writes them into the guide itself, and the rules your project added are extracted into context at the start of every session. One standard, never a second file of conventions to disagree with it.",
+  "author": {
+    "name": "Kerry Back"
+  },
+  "license": "MIT",
+  "keywords": [
+    "research",
+    "reproducibility",
+    "provenance",
+    "collaboration",
+    "empirical"
+  ]
+}

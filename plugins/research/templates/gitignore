@@ -1,0 +1,13 @@
+# Data never goes in git — it lives at $@@DATA_ENV@@, outside the repo.
+data
+*.parquet
+*.csv
+!**/results/*.csv
+*.zip
+*.npz
+
+# Environment and OS noise.
+.venv/
+.DS_Store
+__pycache__/
+*.pyc
