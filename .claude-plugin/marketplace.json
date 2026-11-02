@@ -3,7 +3,7 @@
   "owner": {
     "name": "Kerry Back"
   },
-  "description": "Public plugins: a reviewer for work Claude produced, a narrated-video builder for slide decks, a personal literature knowledge base, free financial and economic data, WRDS research data, risk parity portfolios, a shared research repository, and an email and calendar desk.",
+  "description": "Public plugins: a reviewer for work Claude produced, a narrated-video builder for slide decks, a personal literature knowledge base, free financial and economic data, WRDS research data, risk parity portfolios, a shared research repository, an email and calendar desk, and voice whiteboard tutors.",
   "plugins": [
     {
       "name": "critique",
@@ -44,6 +44,11 @@
       "name": "smithers",
       "source": "./plugins/smithers",
       "description": "A personal email and calendar desk: your inbox split into what needs a reply, a 7-day calendar with multi-select delete, tasks, and a Compose tab. Claude Code reads your Gmail and Calendar through a local connector, writes a fresh overview of what’s ahead for the next seven days every time the app is opened, and parks drafted replies in Compose — you review and press Send. Claude never sends mail and never deletes events."
+    },
+    {
+      "name": "tutor",
+      "source": "./plugins/tutor",
+      "description": "Build voice whiteboard tutors for a topic you teach, from your slides, notebooks, or code. A tutor talks, writes on a board, and checks answers with tools. The skill clones the tutor-starter repo, builds the tutor, and stops for your approval at a review page, a local try, evals, and the deploy. Needs an Anthropic API key to run a tutor."
     }
   ]
 }

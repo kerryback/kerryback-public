@@ -12,6 +12,7 @@ A Claude plugin marketplace.
 | `risk-parity` | The risk parity (equal risk contribution) portfolio, and the covariance matrix it needs, from historical returns. |
 | `research` | Sets up a research repository that several people and their agents can share: per-author folders, portable paths, one canonical dataset, provenance, and a writing guide that learns. |
 | `smithers` | An email and calendar desk. A local app holds Gmail, Calendar, tasks, and drafts. Claude writes the briefing and drafts replies; you review and send. |
+| `tutor` | Builds voice whiteboard tutors from your slides, notebooks, or code, with a review page, evals, and a deploy step. Uses the [tutor-starter](https://github.com/kerryback/tutor-starter) repo. |
 
 ## Install
 
