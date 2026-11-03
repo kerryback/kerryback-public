@@ -49,6 +49,11 @@
       "name": "tutor",
       "source": "./plugins/tutor",
       "description": "Build voice whiteboard tutors for a topic you teach, from your slides, notebooks, or code. A tutor talks, writes on a board, and checks answers with tools. The skill clones the tutor-starter repo, builds the tutor, and stops for your approval at a review page, a local try, evals, and the deploy. Needs an Anthropic API key to run a tutor."
+    },
+    {
+      "name": "valuation",
+      "source": "./plugins/valuation",
+      "description": "Two-stage DCF valuation, started with /valuation {ticker}. Runs unattended: fetches statements, 10-Ks, earnings releases and call transcripts from EDGAR and the Motley Fool (set SEC_USER_AGENT to your name and email), makes every judgment call itself and flags each one on the page for review, and builds a tabbed HTML page and an Excel workbook with live formulas. If ~/repos/homepage exists, it also publishes the page there by committing only its own files and pushing."
     }
   ]
 }
