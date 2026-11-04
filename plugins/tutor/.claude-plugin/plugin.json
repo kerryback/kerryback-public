@@ -1,7 +1,7 @@
 {
   "name": "tutor",
   "description": "Build voice whiteboard tutors for a topic you teach, from your slides, notebooks, or code. A tutor talks, writes on a board, and checks answers with tools. The skill clones the tutor-starter repo, builds the tutor, and stops for your approval at a review page, a local try, evals, and the deploy. Needs an Anthropic API key to run a tutor.",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "author": {
     "name": "Kerry Back"
   },

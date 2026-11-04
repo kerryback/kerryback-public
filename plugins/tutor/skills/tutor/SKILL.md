@@ -60,8 +60,8 @@ Read the reference for a stop when you reach it, not before.
 
 | Path | What it is |
 |---|---|
-| `~/repos/tutors/README.md` | The layout, the scripts and the Koyeb settings |
+| `~/repos/tutors/README.md` | The layout, the scripts and the Railway settings |
 | `engine/`, `instructions/`, `evals/` | Shared by every tutor |
 | `binomial/` | The finished example tutor: copy its patterns |
 | `<tutor>/review.json` | The plan and the code explanations the review page shows |
-| `scripts/` | `setup.sh`, `test.sh`, `review.sh`, `run.sh`, `eval.sh`, `deploy.sh`, `deploy-all.sh` |
+| `scripts/` | `setup.sh`, `test.sh`, `review.sh`, `run.sh`, `eval.sh`, `deploy.sh`, `deploy-home.sh`, `deploy-all.sh` (Railway) |

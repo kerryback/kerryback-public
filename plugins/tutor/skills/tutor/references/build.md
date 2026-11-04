@@ -60,7 +60,7 @@ Copy the patterns from `binomial/`; do not copy its content.
 
 | File | What to write | Pattern |
 |---|---|---|
-| `tutor.toml` | name, title, subtitle, Whisper words (the topic's terms and tickers), `references` (the teaching scripts in order, then `exercises.md`), and `[deploy]` with app `<name>-voice`, service `web`, domain `<name>.<domain>`, volume `<name>-voice-data`, instance `medium`, region `fra` (where every tutor runs; `was` had no room for a medium instance) | `binomial/tutor.toml` |
+| `tutor.toml` | name, title, subtitle, Whisper words (the topic's terms and tickers), `references` (the teaching scripts in order, then `exercises.md`), and `[deploy]` with project `<name>-voice` (its Railway project) and region `europe-west4-drams3a` (Railway's EU West, Amsterdam, where every tutor runs); the domain is `<name>.<domain>` | `binomial/tutor.toml` |
 | `content/module-intros.md` | The Introduction, then each module's Spoken (numbers in words, no symbols), Board (digits fine) and Objectives | `binomial/content/module-intros.md` |
 | `content/topic.md` | Scope (in scope, nearby, other tutors), routing, the tools and when to use each, conventions, plots and when to show them, the exercise format, the mistakes table with the question for each, the deepest misconception, notation | `binomial/content/topic.md` |
 | `content/NN-<module>.md` | One teaching script per module: worked examples and exercises with the snapshot's data, the tool calls that give every number | `binomial/content/01-replication.md` |
@@ -98,7 +98,7 @@ references/review-json.md:
   their calculation in `topic.py`, plain notes, `tests` in plain words, and
   `mistakes` as in `topic.py`; plots with their `preview` arguments.
 
-Check it loads: `cd ~/repos/tutors && .venv/bin/python -c "from pathlib import Path; from review import plan; plan.load(Path('<tutor>'))"`.
+Check it loads, with the venv's Python (`.venv/bin/python`, or `.venv/Scripts/python.exe` on Windows): `cd ~/repos/tutors && .venv/bin/python -c "from pathlib import Path; from review import plan; plan.load(Path('<tutor>'))"`.
 With the review page running, check each plot with
 `curl -s -X POST -H 'Content-Type: application/json' -d '{"module":1,"plot":0}' 127.0.0.1:8040/api/plot`.
 Commit everything, so that the diff after "done" shows only the user's edits.

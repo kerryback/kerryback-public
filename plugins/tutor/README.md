@@ -12,5 +12,5 @@ notebooks, or code. The skill clones [tutor-starter](https://github.com/kerrybac
 to `~/repos/tutors`, builds the tutor, and stops for your approval at a review page,
 a local try, evals, and the deploy.
 
-Running a tutor needs `ANTHROPIC_API_KEY`. Deploying needs a Koyeb account, a domain,
+Running a tutor needs `ANTHROPIC_API_KEY`. Deploying needs a Railway account (Hobby plan), a domain,
 and a mail service. See the tutor-starter README.
