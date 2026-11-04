@@ -43,7 +43,7 @@
     {
       "name": "smithers",
       "source": "./plugins/smithers",
-      "description": "A personal email and calendar desk: your inbox split into what needs a reply, a 7-day calendar with multi-select delete, tasks, and a Compose tab. Claude Code reads your Gmail and Calendar through a local connector, writes a fresh overview of what’s ahead for the next seven days every time the app is opened, and parks drafted replies in Compose — you review and press Send. Claude never sends mail and never deletes events."
+      "description": "A personal email and calendar desk: your inbox split into what needs a reply, a 7-day calendar with multi-select delete, tasks, and a Compose tab. Claude Code reads your Gmail and Calendar through a local connector, writes a fresh overview of what’s ahead for the next seven days every time the app is opened, and parks drafted replies in Compose — you review and press Send. Sending mail, applying calendar proposals, and editing or deleting events are left to you; the skill's instructions, a hook, and a token in the app's page keep Claude from them."
     },
     {
       "name": "tutor",
