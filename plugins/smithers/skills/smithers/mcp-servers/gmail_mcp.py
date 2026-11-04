@@ -37,7 +37,43 @@ HERE = Path(__file__).parent
 HOME_DIR = Path(os.environ.get("SMITHERS_HOME", Path.home() / ".smithers")).expanduser()
 HOME_DIR.mkdir(parents=True, exist_ok=True)
 CREDS_FILE = HOME_DIR / "credentials.json"
-TIMEZONE = os.environ.get("TIMEZONE", "America/Chicago")
+
+
+def _local_timezone() -> str:
+    """The machine's IANA time zone name, e.g. "Europe/Zurich".
+
+    Events created or edited without a UTC offset are placed in this zone, so it
+    must follow the machine rather than a hard-coded city: the user travels.
+    Order: the TZ env var (if it names an IANA zone), then the /etc/localtime
+    symlink (macOS and most Linux), then /etc/timezone (Debian), then UTC.
+    """
+    tz = os.environ.get("TZ", "").strip().lstrip(":")
+    if tz and "/" in tz and not tz.startswith("/"):
+        return tz
+    try:
+        target = os.path.realpath("/etc/localtime")
+        marker = "zoneinfo/"
+        if marker in target:
+            name = target.split(marker, 1)[1]
+            if name.startswith("posix/") or name.startswith("right/"):
+                name = name.split("/", 1)[1]
+            if name:
+                return name
+    except OSError:
+        pass
+    try:
+        name = Path("/etc/timezone").read_text(encoding="utf-8").strip()
+        if name:
+            return name
+    except OSError:
+        pass
+    return "UTC"
+
+
+# TIMEZONE overrides; otherwise follow the machine. Read once at startup, so a
+# connector left running across a time-zone change keeps the old zone until it
+# is restarted.
+TIMEZONE = os.environ.get("TIMEZONE", "").strip() or _local_timezone()
 
 def _load_accounts() -> dict:
     """Which Google accounts this install serves, as {label: email}. Comes from

@@ -25,16 +25,30 @@ Calendar; tokens are stored in `~/.smithers` on your own machine.
 
 This is the part worth reading before you use it.
 
-| Claude can | Claude cannot |
+| Claude can | Left to you |
 | --- | --- |
 | read your mail and calendar | send mail |
-| draft a reply into Compose | delete a calendar event |
-| propose a calendar change | act on either without you |
+| draft a reply into Compose | edit or delete a calendar event |
+| add an event, propose a calendar change | apply a proposal |
 
-Sending and deleting stay your actions, in the app, by your click. Not because
-the API won't allow it — because a mistaken send can't be recalled and a deleted
-event takes someone else's time with it. Claude gets everything ready; you press
-the button.
+Sending, editing, deleting, and applying stay your actions, in the app, by your
+click, because a mistaken send can't be recalled and a deleted event takes
+someone else's time with it. Claude gets everything ready; you press the button.
+
+The app runs on your machine, where Claude's shell can reach it, so this rests on
+three layers, and none of them is airtight:
+
+1. The skill's instructions list the routes behind those buttons and tell Claude
+   never to call them.
+2. A PreToolUse hook in this plugin denies tool calls aimed at those routes. It
+   matches the text of the call, so a request built to hide the path can get
+   past it.
+3. The app answers those routes with 403 unless the request carries a token that
+   is made fresh at each launch and placed in the page your browser loads. That
+   stops a stray request; it does not stop a caller that reads the page first.
+
+If you restart the app while the page is open, reload the page before you press
+Send, Apply, Edit, or Delete.
 
 ## Using it
 

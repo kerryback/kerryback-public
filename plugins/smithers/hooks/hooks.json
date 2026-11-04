@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(?!(Read|Write|Edit|MultiEdit|NotebookEdit|Grep|Glob|LS|TodoWrite)$)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/block_user_routes.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

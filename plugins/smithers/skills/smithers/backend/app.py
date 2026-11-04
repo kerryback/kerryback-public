@@ -1,5 +1,7 @@
 import os
 import re
+import hmac
+import secrets
 import json
 import uuid
 import base64
@@ -10,7 +12,7 @@ from collections import defaultdict
 from datetime import date as date_cls, datetime as dt_cls
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 from mcp import ClientSession
@@ -33,10 +35,19 @@ load_dotenv()
 # server) and writes back into the app over HTTP --- POST /api/drafts to park a
 # reply in the Compose tab, POST /api/briefing to publish the morning overview.
 #
-# The trust boundary is the point of the design.  Claude Code can draft, but it
-# cannot send: drafts sit in the Compose tab until the human presses Send, which
-# is the only path to the connector's send_email.  Deleting or editing calendar
-# events is likewise human-only from the Calendar tab; the agent may only add.
+# The trust boundary is the point of the design.  The agent drafts; the human
+# sends.  Sending mail, editing an event, deleting events, and applying a
+# calendar proposal are the user's own clicks in the browser.  The routes behind
+# those clicks (see USER_ONLY_ROUTES below) do exist, and this process listens on
+# 127.0.0.1, where Claude Code's Bash tool can reach it.  Three things keep the
+# agent off them, and none of them is a hard guarantee:
+#   1. SKILL.md lists the user-only routes and tells the agent never to call them.
+#   2. The plugin's PreToolUse hook (hooks/block_user_routes.py) denies tool calls
+#      that target those paths.  It matches text, so a determined agent can
+#      disguise a request and get past it.
+#   3. Each of those routes needs the per-launch token below, which only the page
+#      served at / carries.  That stops a careless curl, not an agent that reads
+#      the page first.
 # ---------------------------------------------------------------------------
 CONNECTOR_URL = os.environ.get(
     "CONNECTOR_URL", "http://127.0.0.1:8800/mcp")
@@ -83,6 +94,38 @@ def _load_accounts() -> dict:
 
 
 ACCOUNTS = _load_accounts()
+
+# --- The page's token for user-only routes ------------------------------------
+#
+# A fresh random token per launch.  It is injected into the page served at /,
+# and the page's JavaScript sends it as the X-Smithers-Action header on every
+# user-only route.  A request without it gets 403 before any Gmail or Calendar
+# call is made.
+#
+# This is defense in depth against a careless curl, not a security boundary
+# against the agent: anything that can reach 127.0.0.1 can GET / and read the
+# token out of the page.  The real limits on the agent are SKILL.md and the
+# plugin's PreToolUse hook, and the hook can also be got round.
+ACTION_TOKEN = secrets.token_urlsafe(32)
+ACTION_HEADER = "X-Smithers-Action"
+USER_ONLY_ROUTES = [            # documented in SKILL.md and blocked by the hook
+    "POST   /api/email/send",
+    "PATCH  /api/calendar/events/{event_id}",
+    "DELETE /api/calendar/events/{event_id}",
+    "POST   /api/calendar/events/delete",
+    "POST   /api/calendar/proposals/{proposal_id}/apply",
+]
+
+
+def require_page_token(request: Request) -> None:
+    """Reject a user-only request that lacks the page's token.  Runs as a route
+    dependency, so FastAPI calls it before the body is validated and before the
+    handler can reach the connector."""
+    sent = request.headers.get(ACTION_HEADER, "")
+    if not sent or not hmac.compare_digest(sent, ACTION_TOKEN):
+        raise HTTPException(
+            403, "This action is the user's own, from the Smithers page in the "
+                 "browser. Reload the page if you restarted the app.")
 ACCOUNT_LABELS = list(ACCOUNTS)
 DEFAULT_ACCOUNT = ACCOUNT_LABELS[0] if ACCOUNT_LABELS else ""
 MY_EMAILS = [e.lower() for e in ACCOUNTS.values() if e]
@@ -487,6 +530,7 @@ class DeleteEventsPayload(BaseModel):
 async def serve():
     return HTMLResponse(SHELL_HTML
                         .replace("__SMITHERS_SRC__", _banner_src)
+                        .replace("__ACTION_TOKEN__", ACTION_TOKEN)
                         .replace("__MY_EMAILS__", json.dumps(MY_EMAILS))
                         .replace("__ACCOUNTS__", json.dumps(
                             [{"label": k, "email": v} for k, v in ACCOUNTS.items()])))
@@ -710,10 +754,11 @@ async def email_attachment(account: str, message_id: str, attachment_id: str,
         raise HTTPException(500, str(ex))
 
 
-@app.post("/api/email/send")
+@app.post("/api/email/send", dependencies=[Depends(require_page_token)])
 async def send_email(payload: EmailPayload):
     # The human composed (or reviewed the agent's draft) and clicked Send. The
-    # agent never had this tool.
+    # agent is told never to call this route, the plugin's hook blocks it, and
+    # it needs the page's token; see the comment at the top of this file.
     try:
         out = json.loads(await _call_connector("send_email", {
             "to": payload.to, "subject": payload.subject, "body": payload.body,
@@ -770,7 +815,7 @@ async def add_event(payload: EventPayload):
         raise HTTPException(500, str(ex))
 
 
-@app.patch("/api/calendar/events/{event_id}")
+@app.patch("/api/calendar/events/{event_id}", dependencies=[Depends(require_page_token)])
 async def update_event(event_id: str, payload: EventPayload):
     try:
         out = json.loads(await _call_connector("update_calendar_event", {
@@ -786,11 +831,15 @@ async def update_event(event_id: str, payload: EventPayload):
         raise HTTPException(500, str(ex))
 
 
-@app.post("/api/calendar/events/delete")
+@app.post("/api/calendar/events/delete", dependencies=[Depends(require_page_token)])
 async def delete_events(payload: DeleteEventsPayload):
     # Bulk delete from the Calendar tab. Like sending email, this is a human
-    # action: the agent has no delete tool (delete_calendar_event is absent from
-    # CONNECTOR_TOOLS), so it can never reach this path.
+    # action. Nothing makes it unreachable: the app listens on 127.0.0.1, where
+    # the agent's Bash tool can reach it. What keeps the agent off it is SKILL.md
+    # (which tells it never to call this route), the plugin's PreToolUse hook
+    # (which denies tool calls that target it, but matches text and can be got
+    # round), and the page's token (which a careless curl lacks, but which any
+    # caller can read from the page). See the comment at the top of this file.
     if not payload.events:
         raise HTTPException(400, "No events given")
     deleted, failed = [], []
@@ -809,7 +858,7 @@ async def delete_events(payload: DeleteEventsPayload):
     return {"deleted": deleted, "failed": failed}
 
 
-@app.delete("/api/calendar/events/{event_id}")
+@app.delete("/api/calendar/events/{event_id}", dependencies=[Depends(require_page_token)])
 async def delete_event(event_id: str, account: str):
     try:
         out = json.loads(await _call_connector("delete_calendar_event", {
@@ -876,7 +925,7 @@ async def discard_proposal(proposal_id: str):
     return {"status": "discarded"}
 
 
-@app.post("/api/calendar/proposals/{proposal_id}/apply")
+@app.post("/api/calendar/proposals/{proposal_id}/apply", dependencies=[Depends(require_page_token)])
 async def apply_proposal(proposal_id: str, payload: ApplyPayload):
     """The human pressed Apply. This is the only path from a proposal to Google."""
     proposals = _load_proposals()
@@ -1227,6 +1276,10 @@ body {
 <script>
 const SRV = '.';   // relative base, so requests work behind an nginx sub-path
 const MY_EMAILS = __MY_EMAILS__;
+// Per-launch token for the user-only routes (send, edit, delete, apply). The app
+// rejects those routes without it. Defense in depth only: see app.py.
+const ACTION_TOKEN = '__ACTION_TOKEN__';
+const ACTION_HEADERS = {'X-Smithers-Action': ACTION_TOKEN};
 const ACCOUNTS = __ACCOUNTS__;   // [{label, email}], first is the default
 const DEFAULT_ACCOUNT = ACCOUNTS.length ? ACCOUNTS[0].label : '';
 const REFRESHABLE = new Set(['section-overview', 'section-calendar', 'section-emails']);
@@ -1423,7 +1476,7 @@ async function applyProposal(pi) {
   try {
     toast('Applying…', 60000);
     const r = await fetch(SRV + '/api/calendar/proposals/' + encodeURIComponent(p.id) + '/apply', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
+      method: 'POST', headers: {'Content-Type': 'application/json', ...ACTION_HEADERS},
       body: JSON.stringify({indexes: idx})
     });
     if (!r.ok) throw new Error(await r.text());
@@ -1626,7 +1679,7 @@ async function sendEmail() {
   if (!payload.to || !payload.subject || !payload.body) return toast('Fill in all fields');
   try {
     toast('Sending…');
-    const r = await fetch(SRV + '/api/email/send', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    const r = await fetch(SRV + '/api/email/send', {method:'POST', headers:{'Content-Type':'application/json', ...ACTION_HEADERS}, body:JSON.stringify(payload)});
     if (!r.ok) throw new Error(await r.text());
     openCompose();            // clear the form, ready for the next message
     await refreshDrafts();    // the sent draft is gone from the list
@@ -1649,7 +1702,7 @@ async function saveEvent() {
     const url = id ? SRV+'/api/calendar/events/'+encodeURIComponent(id) : SRV+'/api/calendar/events';
     const r = await fetch(url, {
       method: id?'PATCH':'POST',
-      headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+      headers:{'Content-Type':'application/json', ...ACTION_HEADERS}, body:JSON.stringify(payload)
     });
     if (!r.ok) throw new Error(await r.text());
     closeModal('modal-event'); toast(id?'Event updated!':'Event created!');
@@ -1719,7 +1772,7 @@ async function deleteEvent(eventId, account, title) {
   try {
     const r = await fetch(
       SRV + '/api/calendar/events/' + encodeURIComponent(eventId) + '?account=' + encodeURIComponent(account),
-      {method: 'DELETE'}
+      {method: 'DELETE', headers: ACTION_HEADERS}
     );
     if (!r.ok) throw new Error(await r.text());
     toast('Event deleted');
@@ -1728,8 +1781,9 @@ async function deleteEvent(eventId, account, title) {
 }
 
 // ── Multi-select delete on the Calendar tab ──────────────────────────────────
-// Deleting is a human action, same as sending mail: the agent has no delete
-// tool, so nothing here can be triggered on its own.
+// Deleting is a human action, same as sending mail. The delete routes need the
+// page's ACTION_TOKEN; the agent is told never to call them and the plugin's
+// hook blocks them, but neither is a hard guarantee.
 
 function calCheckboxes() {
   return [...document.querySelectorAll('#calendar-content .evt-check')];
@@ -1770,7 +1824,7 @@ async function deleteSelectedEvents() {
   try {
     toast('Deleting ' + picked.length + ' ' + noun + '…', 60000);
     const r = await fetch(SRV + '/api/calendar/events/delete', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
+      method: 'POST', headers: {'Content-Type': 'application/json', ...ACTION_HEADERS},
       body: JSON.stringify({events: picked.map(e => ({event_id: e.event_id, account: e.account}))})
     });
     if (!r.ok) throw new Error(await r.text());
