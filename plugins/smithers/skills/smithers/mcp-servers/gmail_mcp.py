@@ -127,7 +127,7 @@ def _extract_body(payload):
     return ""
 
 
-mcp = FastMCP("SmithersGmail", host="0.0.0.0")
+mcp = FastMCP("SmithersGmail", host="127.0.0.1")
 
 
 @mcp.tool()
@@ -514,4 +514,4 @@ def send_email(to: str, subject: str, body: str, account: str = "",
 if __name__ == "__main__":
     app = mcp.streamable_http_app()
     port = int(os.environ.get("PORT", 8800))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="127.0.0.1", port=port)
