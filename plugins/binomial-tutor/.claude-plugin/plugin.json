@@ -1,0 +1,16 @@
+{
+  "name": "binomial-tutor",
+  "description": "A voice whiteboard tutor for binomial option pricing, run by Claude in your own Claude Code: Claude talks you through one-period, multi-period and American options on a whiteboard in your browser, draws the trees, and checks your answers with exact tools. The voice (Kokoro) and speech recognition (Whisper) are open source and run in the browser, so it needs no API key and no Python packages.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Kerry Back"
+  },
+  "mcpServers": {
+    "tutor": {
+      "command": "python3",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/server/server.py"
+      ]
+    }
+  }
+}

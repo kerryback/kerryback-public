@@ -3,7 +3,7 @@
   "owner": {
     "name": "Kerry Back"
   },
-  "description": "Public plugins: a reviewer for work Claude produced, a narrated-video builder for slide decks, a personal literature knowledge base, free financial and economic data, WRDS research data, risk parity portfolios, a shared research repository, an email and calendar desk, and voice whiteboard tutors.",
+  "description": "Public plugins: a reviewer for work Claude produced, a narrated-video builder for slide decks, a personal literature knowledge base, free financial and economic data, WRDS research data, risk parity portfolios, a shared research repository, an email and calendar desk, and voice whiteboard tutors, and a binomial option pricing tutor that runs in your own Claude Code.",
   "plugins": [
     {
       "name": "critique",
@@ -54,6 +54,11 @@
       "name": "valuation",
       "source": "./plugins/valuation",
       "description": "Two-stage DCF valuation, started with /valuation {ticker}. Runs unattended: fetches statements, 10-Ks, earnings releases and call transcripts from EDGAR and the Motley Fool (set SEC_USER_AGENT to your name and email), makes every judgment call itself and flags each one on the page for review, and builds a tabbed HTML page and an Excel workbook with live formulas. If ~/repos/homepage exists, it also publishes the page there by committing only its own files and pushing."
+    },
+    {
+      "name": "binomial-tutor",
+      "source": "./plugins/binomial-tutor",
+      "description": "A voice whiteboard tutor for binomial option pricing, run by Claude in your own Claude Code: Claude talks you through one-period, multi-period and American options on a whiteboard in your browser, draws the trees, and checks your answers with exact tools. The voice (Kokoro) and speech recognition (Whisper) are open source and run in the browser, so it needs no API key and no Python packages."
     }
   ]
 }
