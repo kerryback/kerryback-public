@@ -8,6 +8,7 @@ Smithers keeps a few actions for the user's own clicks in the browser:
     DELETE /api/calendar/events/{event_id}           (Delete one event)
     POST   /api/calendar/events/delete               (Delete selected events)
     POST   /api/calendar/proposals/{id}/apply        (Apply a proposal)
+    POST   /api/chat, DELETE /api/chat               (Send and New chat, in Chat)
 
 The app listens on 127.0.0.1, so anything Claude Code runs through Bash can
 reach it. This hook reads each tool call before it runs and denies it when the
@@ -49,6 +50,9 @@ _ALWAYS = [
      "apply a calendar proposal (POST /api/calendar/proposals/{id}/apply)"),
     (re.compile(r"/api/calendar/events/delete(?![\w-])"),
      "delete calendar events (POST /api/calendar/events/delete)"),
+    # The Chat tab starts a Claude Code run. An agent must not start another.
+    (re.compile(r"/api/chat(?![\w-])"),
+     "use the Chat tab (/api/chat), which starts a new Claude Code run"),
 ]
 # /api/calendar/events/{id} is user-only for PATCH and DELETE. (Adding an event,
 # POST /api/calendar/events, has no id segment and is allowed.)

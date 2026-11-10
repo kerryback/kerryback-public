@@ -36,6 +36,10 @@ BLOCKED_BASH = [
     # apply
     f"curl -s -X POST {BASE}/api/calendar/proposals/abc123/apply -d '{{}}'",
     f"curl -s -X POST {BASE}/api/calendar/proposals/$PID/apply",
+    # the Chat tab: an agent must not start another agent
+    f"curl -s -X POST {BASE}/api/chat -H 'Content-Type: application/json' -d '{{\"message\":\"hi\"}}'",
+    f"curl -s -X DELETE {BASE}/api/chat",
+    f"curl -s {BASE}/api/chat",
     # bulk delete
     f"curl -s -X POST {BASE}/api/calendar/events/delete -d '{{\"events\":[]}}'",
     # PATCH / DELETE on one event
@@ -79,6 +83,7 @@ ALLOWED_BASH = [
     "curl -X PATCH http://127.0.0.1:9000/api/calendars/events-x",
     "python3 -m pytest -q",
     "date",
+    f"curl -s {BASE}/api/chatter",
 ]
 
 

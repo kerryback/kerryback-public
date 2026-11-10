@@ -114,6 +114,8 @@ USER_ONLY_ROUTES = [            # documented in SKILL.md and blocked by the hook
     "DELETE /api/calendar/events/{event_id}",
     "POST   /api/calendar/events/delete",
     "POST   /api/calendar/proposals/{proposal_id}/apply",
+    "POST   /api/chat",             # the Chat tab's Send; starts a Claude Code run
+    "DELETE /api/chat",             # the Chat tab's New chat
 ]
 
 
@@ -988,6 +990,206 @@ async def get_event_details(event_id: str, account: str):
         raise HTTPException(500, str(ex))
 
 
+# --- Chat tab: a relay to Claude Code ------------------------------------------
+#
+# The app still holds no model.  Each message typed in the Chat tab starts a
+# headless Claude Code run (`claude -p`), resumed on the same session so the
+# conversation carries on, and the reply streams back to the page.  The run uses
+# the user's own Claude Code login and the same smithers skill and PreToolUse
+# hook as any other session, so the trust boundary is unchanged: Claude can read,
+# park drafts, add events, and propose changes; the user still sends and applies.
+#
+# POST /api/chat needs the page's token.  Without it, any web page open in the
+# browser could POST to 127.0.0.1 and start a Claude Code run on this machine.
+# It is also on the hook's list, so an agent cannot start a second agent.
+CHAT_FILE = DATA_DIR / "chat.json"
+CHAT_MAX_MESSAGES = 200
+CHAT_TOOLS = os.environ.get(
+    "SMITHERS_CHAT_TOOLS", "Skill,Bash(curl:*),Bash(date:*)").split(",")
+_chat_lock = asyncio.Lock()
+
+
+def _claude_bin() -> str:
+    import shutil
+    found = os.environ.get("SMITHERS_CLAUDE") or shutil.which("claude")
+    if found:
+        return found
+    fallback = Path.home() / ".local" / "bin" / "claude"
+    return str(fallback) if fallback.exists() else "claude"
+
+
+def _load_chat() -> dict:
+    try:
+        data = json.loads(CHAT_FILE.read_text())
+        if isinstance(data, dict):
+            data.setdefault("messages", [])
+            return data
+    except Exception:
+        pass
+    return {"session_id": None, "messages": []}
+
+
+def _save_chat(chat: dict) -> None:
+    chat["messages"] = chat.get("messages", [])[-CHAT_MAX_MESSAGES:]
+    CHAT_FILE.write_text(json.dumps(chat, indent=2))
+
+
+def _chat_system_prompt(base: str) -> str:
+    return (
+        "You are answering in the Chat tab of the Smithers app, which the user "
+        f"has open in the browser. The app is already running at {base}; do not "
+        "run the launcher. Use the smithers skill and its API for mail, calendar, "
+        "tasks, drafts, and the briefing. Today's date comes from `date`. Reply "
+        "briefly, in plain Markdown, for a reader who sees only your final text, "
+        "not your tool calls. When you park a draft or post a proposal, say it is "
+        "waiting in the Compose or Calendar tab.")
+
+
+def _tool_label(block: dict) -> str:
+    name = block.get("name", "tool")
+    inp = block.get("input") or {}
+    if name == "Bash":
+        cmd = " ".join(str(inp.get("command", "")).split())
+        m = re.search(r"(?:-X\s*(\w+)\s.*?)?(/api/[\w/\-{}?=&%.@+]*)", cmd)
+        if m:
+            method = (m.group(1) or ("POST" if " -d " in cmd or "--data" in cmd else "GET")).upper()
+            return f"{method} {m.group(2)[:80]}"
+        return cmd[:100]
+    if name == "Skill":
+        return f"skill: {inp.get('skill', '')}"
+    return name
+
+
+class ChatPayload(BaseModel):
+    message: str
+
+
+@app.get("/api/chat")
+async def chat_history():
+    chat = _load_chat()
+    return {"messages": chat["messages"], "busy": _chat_lock.locked()}
+
+
+@app.delete("/api/chat", dependencies=[Depends(require_page_token)])
+async def chat_reset():
+    if _chat_lock.locked():
+        raise HTTPException(409, "Claude is still answering.")
+    _save_chat({"session_id": None, "messages": []})
+    return {"status": "cleared"}
+
+
+@app.post("/api/chat", dependencies=[Depends(require_page_token)])
+async def chat_send(payload: ChatPayload, request: Request):
+    from fastapi.responses import StreamingResponse
+
+    text = payload.message.strip()
+    if not text:
+        raise HTTPException(400, "Empty message")
+    if _chat_lock.locked():
+        raise HTTPException(409, "Claude is still answering the last message.")
+
+    base = str(request.base_url).rstrip("/")
+
+    async def stream():
+        def ev(kind, value=None):
+            return json.dumps({"t": kind, "v": value}) + "\n"
+
+        async with _chat_lock:
+            chat = _load_chat()
+            chat["messages"].append({"role": "user", "text": text})
+            _save_chat(chat)
+
+            # The message goes in on stdin, so text that starts with "-" is
+            # never read as a command-line flag.
+            args = [_claude_bin(), "-p",
+                    "--output-format", "stream-json", "--verbose",
+                    "--include-partial-messages",
+                    "--append-system-prompt", _chat_system_prompt(base),
+                    "--allowedTools", *CHAT_TOOLS]
+            if chat.get("session_id"):
+                args += ["--resume", chat["session_id"]]
+
+            # Run on the user's Claude Code login, not an API key the app's .env
+            # may hold, and not as a child of whatever session launched the app.
+            env = {k: v for k, v in os.environ.items()
+                   if k not in ("ANTHROPIC_API_KEY", "CLAUDECODE")
+                   and not k.startswith("CLAUDE_CODE_")}
+
+            reply, tools, error = "", [], None
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *args, cwd=str(DATA_DIR), env=env,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    limit=16 * 1024 * 1024)
+                proc.stdin.write(text.encode())
+                await proc.stdin.drain()
+                proc.stdin.close()
+            except FileNotFoundError:
+                error = ("Claude Code (the `claude` command) was not found. "
+                         "Set SMITHERS_CLAUDE to its path and restart Smithers.")
+                proc = None
+
+            try:
+                if proc is not None:
+                    while True:
+                        line = await proc.stdout.readline()
+                        if not line:
+                            break
+                        try:
+                            msg = json.loads(line)
+                        except ValueError:
+                            continue
+                        kind = msg.get("type")
+                        if kind == "system" and msg.get("session_id"):
+                            chat["session_id"] = msg["session_id"]
+                        elif kind == "stream_event":
+                            e = msg.get("event") or {}
+                            if e.get("type") == "message_start" and reply and not reply.endswith("\n\n"):
+                                reply += "\n\n"
+                                yield ev("text", "\n\n")
+                            elif e.get("type") == "content_block_delta":
+                                d = e.get("delta") or {}
+                                if d.get("type") == "text_delta" and d.get("text"):
+                                    reply += d["text"]
+                                    yield ev("text", d["text"])
+                        elif kind == "assistant":
+                            for block in (msg.get("message") or {}).get("content", []):
+                                if block.get("type") == "tool_use":
+                                    label = _tool_label(block)
+                                    tools.append(label)
+                                    yield ev("tool", label)
+                        elif kind == "result":
+                            if msg.get("session_id"):
+                                chat["session_id"] = msg["session_id"]
+                            if msg.get("is_error"):
+                                error = str(msg.get("result") or msg.get("subtype") or "Claude Code reported an error.")
+                            elif not reply.strip() and msg.get("result"):
+                                reply = str(msg["result"])
+                                yield ev("text", reply)
+                    await proc.wait()
+                    if proc.returncode and not error and not reply.strip():
+                        err = (await proc.stderr.read()).decode(errors="replace").strip()
+                        error = err[-800:] or f"Claude Code exited with code {proc.returncode}."
+            finally:
+                # The page closed or the request was cancelled: stop the run.
+                if proc is not None and proc.returncode is None:
+                    proc.kill()
+                    await proc.wait()
+                entry = {"role": "assistant", "text": reply.strip(), "tools": tools}
+                if error:
+                    entry["error"] = error
+                chat["messages"].append(entry)
+                _save_chat(chat)
+
+            if error:
+                yield ev("error", error)
+            yield ev("done")
+
+    return StreamingResponse(stream(), media_type="application/x-ndjson")
+
+
 SHELL_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1142,6 +1344,25 @@ body {
 .tm-del { background: none; border: none; cursor: pointer; color: #cbd5e1; font-size: 1rem; padding: 0 .2rem; }
 .tm-del:hover { color: #ef4444; }
 .tm-completed-toggle { background: none; border: none; cursor: pointer; color: #94a3b8; font-size: .8rem; margin-top: .5rem; padding: 0; }
+#chat-log { display: flex; flex-direction: column; gap: .6rem; margin-bottom: 1rem; }
+.chat-empty { font-size: .88rem; color: #64748b; }
+.chat-msg { max-width: 88%; padding: .6rem .85rem; border-radius: 10px; font-size: .9rem; line-height: 1.55; word-wrap: break-word; }
+.chat-msg.user { align-self: flex-end; background: #1a2744; color: #fff; white-space: pre-wrap; }
+.chat-msg.assistant { align-self: flex-start; background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+.chat-msg.assistant p { margin: 0 0 .5rem; }
+.chat-msg.assistant p:last-child { margin-bottom: 0; }
+.chat-msg.assistant ul, .chat-msg.assistant ol { margin: 0 0 .5rem 1.25rem; }
+.chat-msg.assistant code { background: #f1f5f9; border-radius: 3px; padding: 0 .25rem; font-size: .84em; }
+.chat-msg.assistant pre { background: #f1f5f9; border-radius: 6px; padding: .5rem .7rem; overflow-x: auto; margin: 0 0 .5rem; }
+.chat-msg.assistant pre code { background: none; padding: 0; }
+.chat-msg.assistant h1, .chat-msg.assistant h2, .chat-msg.assistant h3, .chat-msg.assistant h4 { font-size: .95rem; margin: .4rem 0 .3rem; color: #1a2744; }
+.chat-tools { font-size: .74rem; color: #94a3b8; margin-bottom: .35rem; font-family: ui-monospace, Menlo, monospace; }
+.chat-tools div::before { content: "\2192  "; }
+.chat-err { color: #b91c1c; font-size: .84rem; margin-top: .3rem; }
+.chat-wait { color: #94a3b8; font-style: italic; }
+.chat-input { display: flex; gap: .5rem; align-items: flex-end; position: sticky; bottom: 0; background: #f0f3f8; padding: .5rem 0 1rem; }
+.chat-input textarea { flex: 1; padding: .55rem .75rem; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; font-size: .9rem; resize: vertical; }
+.chat-input .btn-ok:disabled { opacity: .45; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -1156,6 +1377,7 @@ body {
     <button class="nav-tab" data-sec="section-emails"  onclick="showSection('section-emails')">Emails</button>
     <button class="nav-tab" data-sec="section-compose" onclick="showSection('section-compose')">Compose<span id="draft-badge" class="tab-badge" style="display:none">0</span></button>
     <button class="nav-tab" data-sec="section-tasks"   onclick="showSection('section-tasks')">Tasks</button>
+    <button class="nav-tab" data-sec="section-chat"    onclick="showSection('section-chat')">Chat</button>
     <div class="nav-right">
       <button class="nav-action" id="btn-refresh" onclick="refreshSection()" style="visibility:hidden" title="Refresh">&#8635;</button>
       <!-- No New Email or Add Event buttons here. Both lived next to the tabs
@@ -1233,6 +1455,18 @@ body {
       <button onclick="tmAdd()">+ Add</button>
     </div>
     <div id="tm-list"></div>
+  </section>
+  <section id="section-chat" class="section">
+    <h2>Chat</h2>
+    <div class="sec-actions">
+      <button class="action-btn" id="chat-new" onclick="chatReset()" title="Start a new conversation with Claude">New chat</button>
+    </div>
+    <div id="chat-log"><p class="chat-empty">Ask Claude about your mail, calendar, or tasks. Replies come from Claude Code on this computer. Drafts it writes wait in Compose; you still press Send.</p></div>
+    <div class="chat-input">
+      <textarea id="chat-text" rows="3" placeholder="Message Claude&hellip; (Enter to send, Shift+Enter for a new line)"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();chatSend();}"></textarea>
+      <button class="btn-ok" id="chat-send" onclick="chatSend()">Send</button>
+    </div>
   </section>
 </main>
 
@@ -1959,7 +2193,145 @@ function tmTaskHtml(t){
   </div>`;
 }
 
+// --- Chat tab: each message starts a Claude Code run on this computer --------
+// POST /api/chat carries the page token, like Send and Apply, so no other web
+// page and no agent can start a run. The reply streams back as NDJSON lines:
+// {"t":"text"|"tool"|"error"|"done", "v": ...}.
+let chatBusy = false;
+
+function chatEsc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// A small Markdown renderer. Everything is escaped first, so a reply that
+// quotes an email cannot inject markup into the page.
+function chatMarkdown(src) {
+  const blocks = [];
+  let s = chatEsc(src).replace(/```[\w-]*\n?([\s\S]*?)```/g, (_, code) => {
+    blocks.push('<pre><code>' + code.replace(/\n$/, '') + '</code></pre>');
+    return '\u0000' + (blocks.length - 1) + '\u0000';
+  });
+  const inline = t => t
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const out = [];
+  let list = null, para = [];
+  const flushPara = () => { if (para.length) { out.push('<p>' + inline(para.join('<br>')) + '</p>'); para = []; } };
+  const flushList = () => { if (list) { out.push('<' + list.tag + '>' + list.items.map(i => '<li>' + inline(i) + '</li>').join('') + '</' + list.tag + '>'); list = null; } };
+  for (const line of s.split('\n')) {
+    let m;
+    if (/^\u0000\d+\u0000$/.test(line.trim())) { flushPara(); flushList(); out.push(line.trim()); }
+    else if ((m = line.match(/^\s*[-*]\s+(.*)$/))) { flushPara(); if (!list || list.tag !== 'ul') { flushList(); list = {tag: 'ul', items: []}; } list.items.push(m[1]); }
+    else if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) { flushPara(); if (!list || list.tag !== 'ol') { flushList(); list = {tag: 'ol', items: []}; } list.items.push(m[1]); }
+    else if ((m = line.match(/^(#{1,4})\s+(.*)$/))) { flushPara(); flushList(); out.push('<h4>' + inline(m[2]) + '</h4>'); }
+    else if (!line.trim()) { flushPara(); flushList(); }
+    else { flushList(); para.push(line); }
+  }
+  flushPara(); flushList();
+  return out.join('').replace(/\u0000(\d+)\u0000/g, (_, i) => blocks[+i]);
+}
+
+function chatBubble(role) {
+  const log = document.getElementById('chat-log');
+  const empty = log.querySelector('.chat-empty');
+  if (empty) empty.remove();
+  const el = document.createElement('div');
+  el.className = 'chat-msg ' + role;
+  if (role === 'assistant') el.innerHTML = '<div class="chat-tools"></div><div class="chat-body"></div>';
+  log.appendChild(el);
+  return el;
+}
+
+function chatFill(el, msg) {
+  el.querySelector('.chat-tools').innerHTML = (msg.tools || []).map(t => '<div>' + chatEsc(t) + '</div>').join('');
+  el.querySelector('.chat-body').innerHTML = msg.text ? chatMarkdown(msg.text) : '';
+  if (msg.error) el.insertAdjacentHTML('beforeend', '<div class="chat-err">' + chatEsc(msg.error) + '</div>');
+}
+
+function chatScroll() { window.scrollTo(0, document.body.scrollHeight); }
+
+function chatSetBusy(b) {
+  chatBusy = b;
+  document.getElementById('chat-send').disabled = b;
+  document.getElementById('chat-new').disabled = b;
+}
+
+async function chatLoad() {
+  try {
+    const r = await fetch('/api/chat');
+    const data = await r.json();
+    const log = document.getElementById('chat-log');
+    if (data.messages && data.messages.length) {
+      log.innerHTML = '';
+      for (const m of data.messages) {
+        const el = chatBubble(m.role);
+        if (m.role === 'user') el.textContent = m.text; else chatFill(el, m);
+      }
+    }
+  } catch (e) { /* the empty-state note stays */ }
+}
+
+async function chatSend() {
+  const box = document.getElementById('chat-text');
+  const text = box.value.trim();
+  if (!text || chatBusy) return;
+  box.value = '';
+  chatSetBusy(true);
+  chatBubble('user').textContent = text;
+  const el = chatBubble('assistant');
+  const msg = {text: '', tools: [], error: ''};
+  el.querySelector('.chat-body').innerHTML = '<span class="chat-wait">Claude is thinking&hellip;</span>';
+  chatScroll();
+  try {
+    const r = await fetch('/api/chat', {method: 'POST',
+      headers: {'Content-Type': 'application/json', ...ACTION_HEADERS},
+      body: JSON.stringify({message: text})});
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || ('HTTP ' + r.status));
+    }
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const {value, done} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, {stream: true});
+      let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
+        if (!line.trim()) continue;
+        const ev = JSON.parse(line);
+        if (ev.t === 'text') msg.text += ev.v;
+        else if (ev.t === 'tool') msg.tools.push(ev.v);
+        else if (ev.t === 'error') msg.error = ev.v;
+        chatFill(el, msg);
+        if (!msg.text && !msg.error) el.querySelector('.chat-body').innerHTML = '<span class="chat-wait">Working&hellip;</span>';
+        chatScroll();
+      }
+    }
+  } catch (e) {
+    msg.error = String(e.message || e);
+    chatFill(el, msg);
+  }
+  chatSetBusy(false);
+  // Claude may have parked a draft, added an event, or posted a proposal.
+  refreshDrafts(); refreshProposals();
+  box.focus();
+}
+
+async function chatReset() {
+  if (chatBusy) return;
+  const r = await fetch('/api/chat', {method: 'DELETE', headers: ACTION_HEADERS});
+  if (!r.ok) { toast('Could not start a new chat'); return; }
+  document.getElementById('chat-log').innerHTML = '<p class="chat-empty">New conversation. Ask Claude about your mail, calendar, or tasks.</p>';
+  document.getElementById('chat-text').focus();
+}
+
 renderAccountOptions();
+chatLoad();
 checkServer();
 setInterval(checkServer, 30000);
 refreshDrafts();

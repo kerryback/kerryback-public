@@ -171,6 +171,12 @@ app.
 | `DELETE /api/calendar/events/{event_id}` | Delete, on one event |
 | `POST /api/calendar/events/delete` | Delete selected, in the Calendar tab |
 | `POST /api/calendar/proposals/{proposal_id}/apply` | Apply, on a proposal |
+| `POST /api/chat`, `DELETE /api/chat` | Send and New chat, in the Chat tab |
+
+The Chat tab is how the user talks to you from inside the app: each message
+starts a headless Claude Code run with this skill. If you are answering in that
+tab, your reply is shown as Markdown and your tool calls are not; never call
+`/api/chat` yourself.
 
 To get one of these things done, do the matching agent-side step and stop:
 park a draft (`POST /api/drafts`), or post a proposal

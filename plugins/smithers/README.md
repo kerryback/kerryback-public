@@ -47,8 +47,13 @@ three layers, and none of them is airtight:
    is made fresh at each launch and placed in the page your browser loads. That
    stops a stray request; it does not stop a caller that reads the page first.
 
+The Chat tab's Send and New chat buttons are on the same list. Each message
+starts a Claude Code run on your machine, so the route needs the page token (no
+other web page can start one) and the hook blocks it (an agent cannot start
+another agent).
+
 If you restart the app while the page is open, reload the page before you press
-Send, Apply, Edit, or Delete.
+Send, Apply, Edit, Delete, or a Chat button.
 
 ## Using it
 
@@ -62,6 +67,27 @@ any other time does the same thing.
 "Draft a reply to Dana" writes into Compose. You open it, change what you want,
 and send it yourself. "What am I walking into with the 2pm" reads the thread
 history behind a meeting and tells you.
+
+The Chat tab lets you ask the same things from inside the app. Each message runs
+Claude Code headless (`claude -p`) on your own login, resumed on one session so
+the conversation carries on; the reply streams into the tab. New chat starts a
+fresh session. The conversation is kept in `~/.smithers/chat.json`.
+
+## Calendar sync (optional)
+
+`scripts/sync_calendars.py` keeps the accounts' Google calendars in sync with
+full copies both ways, for the next 60 days. Run it with the app's environment:
+
+    ~/.smithers/venv/bin/python <skill-dir>/scripts/sync_calendars.py --dry-run
+
+Drop `--dry-run` to write. Copies carry no attendees, so they send no
+invitations, and each is tagged with the event it came from. The script only adds
+copies: when an original moves, changes, or is cancelled, it posts a proposal to
+the Calendar tab and you apply it. An event already on both calendars (same
+invitation, same title and start, or exactly the same start and end) is not
+copied, and a copy you delete is not re-created. Its state is in
+`~/.smithers/calendar_sync.json`. It is meant to run on a schedule, before the
+morning briefing.
 
 ## Where things live
 
