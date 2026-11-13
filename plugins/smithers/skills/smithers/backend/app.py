@@ -1006,6 +1006,10 @@ CHAT_FILE = DATA_DIR / "chat.json"
 CHAT_MAX_MESSAGES = 200
 CHAT_TOOLS = os.environ.get(
     "SMITHERS_CHAT_TOOLS", "Skill,Bash(curl:*),Bash(date:*)").split(",")
+# Other mail tools the user's Claude Code login may carry (a claude.ai Gmail
+# connector, say) see one account, not the configured set; keep the chat off them.
+CHAT_DISALLOWED = os.environ.get(
+    "SMITHERS_CHAT_DISALLOWED", "mcp__claude_ai_Gmail").split(",")
 _chat_lock = asyncio.Lock()
 
 
@@ -1039,7 +1043,9 @@ def _chat_system_prompt(base: str) -> str:
         "You are answering in the Chat tab of the Smithers app, which the user "
         f"has open in the browser. The app is already running at {base}; do not "
         "run the launcher. Use the smithers skill and its API for mail, calendar, "
-        "tasks, drafts, and the briefing. Today's date comes from `date`. Reply "
+        "tasks, drafts, and the briefing. The API covers every configured mail "
+        "account; use no other mail tool. For links in an email, use "
+        "/api/email/body. Today's date comes from `date`. Reply "
         "briefly, in plain Markdown, for a reader who sees only your final text, "
         "not your tool calls. When you park a draft or post a proposal, say it is "
         "waiting in the Compose or Calendar tab.")
@@ -1105,7 +1111,8 @@ async def chat_send(payload: ChatPayload, request: Request):
                     "--output-format", "stream-json", "--verbose",
                     "--include-partial-messages",
                     "--append-system-prompt", _chat_system_prompt(base),
-                    "--allowedTools", *CHAT_TOOLS]
+                    "--allowedTools", *CHAT_TOOLS,
+                    "--disallowedTools", *CHAT_DISALLOWED]
             if chat.get("session_id"):
                 args += ["--resume", chat["session_id"]]
 

@@ -127,8 +127,11 @@ Read:
 | Endpoint | What you get |
 |---|---|
 | `GET /api/inbox` | Unreplied messages, both accounts. Snippets only. |
-| `GET /api/message/{message_id}?account=` | The full body of one message. |
-| `GET /api/search?q=` | Search the mailbox. |
+| `GET /api/message/{message_id}?account=` | The full body of one message, as plain text. |
+| `GET /api/email/body?account=&message_id=` | The same message as HTML, with its links (Box, Google Docs, paper links, unsubscribe). |
+| `GET /api/email/attachments?account=&message_id=` | The message's attachments: filename, size, `attachment_id`. |
+| `GET /api/email/attachment?account=&message_id=&attachment_id=&filename=` | One attachment's bytes; save with `curl -o`. |
+| `GET /api/search?q=` | Search every configured account at once, with Gmail search syntax. |
 | `GET /api/contact?email=` | Recent correspondence with one person. |
 | `GET /api/meeting-invitations` | Meeting invitations found in recent mail. |
 | `GET /api/calendar?start_date=&end_date=` | Events (default: next 7 days). |
@@ -142,6 +145,15 @@ return short snippets, not message content. Whenever you need to know what a
 message actually says — to summarize it, answer a question about it, or reply to
 it — fetch `/api/message/{message_id}` with the `account` from the same result.
 Never summarize or reply from a snippet alone.
+
+The plain-text body drops links. When the user wants a link, a URL, or a file
+that the email points to, fetch `/api/email/body` for the HTML and take the
+link from it. Unwrap security redirects (urldefense, safelinks) before giving it.
+
+This API is the only mail interface. Every route covers every account in
+`config.json` (see `GET /api/accounts`). Do not use any other mail tool, such
+as a claude.ai Gmail connector: it sees only one account. Do not read the
+OAuth token files directly; if a route is missing something, say so.
 
 Write:
 
