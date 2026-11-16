@@ -6,10 +6,10 @@ anything.
 | The user wants | Do |
 |---|---|
 | To change an intro, board line or objective | Open `scripts/review.sh <tutor>` (a tutor built before the review page has no `review.json`: write one with `stop` 2 from its files first), or edit `content/module-intros.md`; rerun the tests and update the prompt hash |
-| To add or reorganize modules | Build the change as in references/build.md, update `review.json`, and show the review page |
+| To add or reorganize modules | Build the change as in ../create/references/build.md (in the create skill), update `review.json`, and show the review page |
 | To add or fix a tool | Test it against the user's code first; update `topic.md`, the scripts and `review.json`'s code blocks |
-| To check behavior | Evals (cost first), references/try-and-evals.md |
-| To redeploy | references/deploy.md |
+| To check behavior | Evals (cost first), ../create/references/try-and-evals.md |
+| To redeploy | ../create/references/deploy.md |
 
 ## Changing the shared parts
 

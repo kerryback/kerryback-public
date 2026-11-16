@@ -79,7 +79,7 @@ Tell the user the address.
 
 Only step 1. The domain and the secrets are already in place. After a change
 to `engine/` or `instructions/`, use `scripts/deploy-all.sh` instead (see
-references/later-visits.md).
+the edit skill's references/later-visits.md).
 
 ## When a deploy fails
 

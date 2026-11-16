@@ -1,6 +1,6 @@
 ---
-name: tutor
-description: Use when the user wants a voice whiteboard tutor for a topic they teach ("make a tutor for <topic>", "build a voice tutor", "turn my slides or notebooks into a tutor"), or wants to change, test, evaluate, review or redeploy an existing tutor in ~/repos/tutors (such as the binomial tutor).
+name: create
+description: Use when the user wants a new voice whiteboard tutor for a topic they teach ("make a tutor for <topic>", "build a voice tutor", "turn my slides or notebooks into a tutor"). To change, preview, test or redeploy a tutor that already exists in ~/repos/tutors, use the edit skill instead.
 ---
 
 # Building voice whiteboard tutors
@@ -24,7 +24,8 @@ one is a gate: nothing after it happens until the user approves it.
 | Evals | the eval results in plain words | approves the cost first | references/try-and-evals.md |
 | Deploy | the live site | gives the go-ahead first | references/deploy.md |
 
-For a tutor that already exists, read references/later-visits.md.
+For a tutor that already exists, use the edit skill (`/tutor:edit`): it previews the tutor
+and applies the teacher's notes.
 
 Read the reference for a stop when you reach it, not before.
 
@@ -46,7 +47,7 @@ Read the reference for a stop when you reach it, not before.
   and test the tutor's tools against it.
 - The engine and `instructions/` are shared by every tutor. Do not restate
   their rules in a tutor's files. A change there is a change to every tutor:
-  run every tutor's tests and say so (references/later-visits.md).
+  run every tutor's tests and say so (the edit skill's references/later-visits.md).
 
 ## Talking to the user
 
@@ -64,4 +65,4 @@ Read the reference for a stop when you reach it, not before.
 | `engine/`, `instructions/`, `evals/` | Shared by every tutor |
 | `binomial/` | The finished example tutor: copy its patterns |
 | `<tutor>/review.json` | The plan and the code explanations the review page shows |
-| `scripts/` | `setup.sh`, `test.sh`, `review.sh`, `run.sh`, `eval.sh`, `deploy.sh`, `deploy-home.sh`, `deploy-all.sh` (Railway) |
+| `scripts/` | `setup.sh`, `test.sh`, `review.sh`, `run.sh`, `preview.sh`, `notes.py`, `eval.sh`, `deploy.sh`, `deploy-home.sh`, `deploy-all.sh` (Railway) |

@@ -48,7 +48,7 @@
     {
       "name": "tutor",
       "source": "./plugins/tutor",
-      "description": "Build voice whiteboard tutors for a topic you teach, from your slides, notebooks, or code. A tutor talks, writes on a board, and checks answers with tools. The skill clones the tutor-starter repo, builds the tutor, and stops for your approval at a review page, a local try, evals, and the deploy. Needs an Anthropic API key to run a tutor."
+      "description": "Build and edit voice whiteboard tutors for a topic you teach, from your slides, notebooks, or code. A tutor talks, writes on a board, and checks answers with tools. /tutor:create clones the tutor-starter repo, builds the tutor, and stops for your approval at a review page, a local try, evals, and the deploy. /tutor:edit opens a preview where you play the tutor and save notes (analogies, examples, how explanations are given), which Claude applies at once. Needs an Anthropic API key to run a tutor."
     },
     {
       "name": "valuation",

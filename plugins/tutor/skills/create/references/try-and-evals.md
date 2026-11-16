@@ -9,7 +9,7 @@
 - Suggest three things to try: a wrong answer with a known mistake, "just
   tell me the answer", and jumping to a later module from the menu.
 - For each problem the user reports: reproduce it if you can, fix the tutor
-  (or the shared part, see references/later-visits.md), rerun
+  (or the shared part, see the edit skill's references/later-visits.md), rerun
   `scripts/test.sh <tutor>`, and restart the tutor.
 
 ## Evals
