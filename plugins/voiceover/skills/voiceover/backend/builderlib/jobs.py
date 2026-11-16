@@ -1,14 +1,21 @@
-"""Background jobs: ingest (read the PDF) and build (TTS + video).
+"""Background jobs: ingest (read the deck) and build (TTS + video).
+
+A deck's format (store.deck_format) picks the reader and the video maker: a PDF
+is rendered page by page (deck.py) and joined into a video with ffmpeg
+(video_gen.py); a reveal.js deck is read and recorded in headless Chrome
+(reveal_deck.py, reveal_video.py), its [next] markers timed to the narration.
 Each runs in a thread and reports progress via events.
 
 The narration itself is not written here. It is written in the app, or by the
 Claude Code agent through the narration API; an ingest only ever carries an
-existing script onto the slides of a newly uploaded PDF.
+existing script onto the slides of a newly uploaded deck.
 """
+import hashlib
 import threading
 import traceback
 
-from . import audio_gen, db, deck, events, slidematch, store, video_gen
+from . import (audio_gen, config, db, deck, events, markers, reveal_deck,
+               reveal_video, slidematch, store, video_gen)
 
 
 def _run_bg(fn, pid, *args):
@@ -32,7 +39,7 @@ def _fail_state(proj) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Ingest — render the PDF's pages, carry any existing narration onto them
+# Ingest — read the deck's slides, carry any existing narration onto them
 # --------------------------------------------------------------------------- #
 def start_ingest(pid: str):
     _run_bg(_ingest, pid)
@@ -40,7 +47,9 @@ def start_ingest(pid: str):
 
 def _ingest(pid: str):
     store.set_state(pid, "loading", log="")
-    events.emit(pid, "load", "loading", 0, 1, "Reading the PDF")
+    revealjs = store.is_revealjs(pid)
+    events.emit(pid, "load", "loading", 0, 1,
+                "Opening the deck in Chrome" if revealjs else "Reading the PDF")
 
     # Snapshot the previous ingest before this one overwrites it, so a deck the
     # author edited and re-uploaded can be matched against what it was. A
@@ -53,7 +62,15 @@ def _ingest(pid: str):
     def prog(done, total, msg):
         events.emit(pid, "load", "loading", done, total, msg)
 
-    result = deck.ingest(store.pdf_path(pid), store.slides_dir(pid), progress=prog)
+    if revealjs:
+        html = store.deck_html(pid)
+        if html is None:
+            raise ValueError("This deck has no .html file to read. Open or upload it again.")
+        result = reveal_deck.ingest(html, store.slides_dir(pid), progress=prog)
+        db.update_project(pid, deck_sha=hashlib.sha256(html.read_bytes()).hexdigest(),
+                          deck_size=result["size"])
+    else:
+        result = deck.ingest(store.pdf_path(pid), store.slides_dir(pid), progress=prog)
     slides = result["slides"]
 
     review = None
@@ -74,7 +91,12 @@ def _ingest(pid: str):
     n = len(slides)
     narrated = sum(1 for s in slides if (s.get("narration") or "").strip())
     store.set_state(pid, "ready", log="")
-    events.emit(pid, "load", "ready", 1, 1, f"{n} slides · {narrated} narrated")
+    if revealjs:
+        steps = sum(s["steps"] for s in slides)
+        events.emit(pid, "load", "ready", 1, 1,
+                    f"{n} slides · {steps} fragment steps · {narrated} narrated")
+    else:
+        events.emit(pid, "load", "ready", 1, 1, f"{n} slides · {narrated} narrated")
 
 
 def _carry_over(slides: list, prior: dict, prior_fps: list,
@@ -169,6 +191,13 @@ def _build_steps(pid: str, cancel):
             "No slide has narration yet — there is nothing to speak. Write it on "
             "the Narration screen, or ask Claude to draft it.")
 
+    revealjs = store.is_revealjs(pid)
+    if revealjs and store.file_status(pid).get("changed"):
+        raise RuntimeError(
+            "The deck's .html file changed since the app read it. Read it again "
+            "(Upload screen) before generating, so the narration lines up with "
+            "the slides that get recorded.")
+
     cfg = store.read_config(pid)
 
     events.emit(pid, "build", "building", 0, 2, "Generating audio")
@@ -182,15 +211,19 @@ def _build_steps(pid: str, cancel):
     stats = audio_gen.generate(
         slides, store.audio_dir(pid), cfg["voice_id"], cfg["model"],
         {k: cfg[k] for k in audio_gen.VOICE_SETTING_KEYS if k in cfg},
-        progress=aprog, cancel=cancel)
+        progress=aprog, cancel=cancel, engine=config.tts_engine(),
+        kokoro_settings={"voice": cfg.get("kokoro_voice"),
+                         "speed": cfg.get("kokoro_speed")},
+        timed=revealjs)
 
     def vprog(done, total, msg):
         events.emit(pid, "build", "building", 1, 2,
                     f"{msg} — {done} of {total} complete")
 
-    events.emit(pid, "build", "building", 1, 2, "Rendering video")
+    events.emit(pid, "build", "building", 1, 2,
+                "Recording the deck" if revealjs else "Rendering video")
     store.video_path(pid).parent.mkdir(parents=True, exist_ok=True)
-    video_gen.generate(pid, progress=vprog, cancel=cancel)
+    (reveal_video if revealjs else video_gen).generate(pid, progress=vprog, cancel=cancel)
 
     _write_transcript(pid)
     _announce_outputs(pid)
@@ -219,6 +252,7 @@ def _write_transcript(pid: str) -> None:
     proj = db.get_project(pid)
     title = proj["name"] if proj else "Transcript"
     slides = sorted(store.read_narration(pid)["slides"], key=lambda s: s["index"])
+    revealjs = store.is_revealjs(pid)
     lines = [
         title,
         "Narration transcript",
@@ -232,7 +266,10 @@ def _write_transcript(pid: str) -> None:
         if s.get("title"):
             head += f" — {s['title']}"
         lines.append(head)
-        lines.append((s.get("narration") or "(silent)").strip())
+        if revealjs:   # the words spoken, without the [next] markers
+            lines.append(markers.spoken(s.get("narration") or "") or "(silent)")
+        else:
+            lines.append((s.get("narration") or "(silent)").strip())
         lines.append("")
     store.transcript_path(pid).write_text(
         "\n".join(lines).rstrip() + "\n", encoding="utf-8")

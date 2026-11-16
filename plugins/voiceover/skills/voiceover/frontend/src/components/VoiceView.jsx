@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronDown } from 'lucide-react'
-import { api } from '../api'
+import { Check, ChevronDown, Play } from 'lucide-react'
+import { api, ENGINE_EVENT, kokoroPreviewUrl } from '../api'
 import {
   DEFAULT_TTS,
   ELEVEN_MODELS,
@@ -13,7 +13,8 @@ import { Card, ErrorBanner, Field, Spinner, inputClass } from './ui'
 
 const AUTOSAVE_MS = 500
 
-// Audio settings: which voice, which model, and how it reads. Settings autosave
+// Audio settings: which engine (account-wide), then that engine's voice and
+// how it reads. Settings autosave
 // the way the narration does — Generate lives in the top bar, so there is no
 // "apply" step to forget, and a settings change makes the built video stale on
 // its own (store.build_signature covers them).
@@ -35,6 +36,18 @@ export default function VoiceView({ project }) {
   )
   const [speed, setSpeed] = useState(cfg.speed ?? DEFAULT_TTS.speed)
 
+  // The engine is an account setting (~/.voiceover/.env), not a deck setting:
+  // it is saved the moment it is picked. Each deck keeps settings for both
+  // engines, so switching and switching back loses nothing.
+  const [engine, setEngineState] = useState(null) // null until loaded
+  const [kokoroVoice, setKokoroVoice] = useState(cfg.kokoro_voice || 'af_heart')
+  const [kokoroSpeed, setKokoroSpeed] = useState(cfg.kokoro_speed ?? 1.0)
+  const [kokoroVoices, setKokoroVoices] = useState([])
+  const [kokoroRange, setKokoroRange] = useState([0.7, 1.3])
+  const [kokoroDownloaded, setKokoroDownloaded] = useState(true)
+  const [previewing, setPreviewing] = useState(false)
+  const previewAudio = useRef(null)
+
   const [voices, setVoices] = useState([])
   const [voicesConfigured, setVoicesConfigured] = useState(true)
   const [saved, setSaved] = useState(false)
@@ -53,6 +66,73 @@ export default function VoiceView({ project }) {
   const [library, setLibrary] = useState(null)
   const [lookingUp, setLookingUp] = useState(false)
   const [lookupError, setLookupError] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    api
+      .getEngine()
+      .then((res) => alive && setEngineState(res.engine))
+      .catch(() => alive && setEngineState('elevenlabs'))
+    api
+      .kokoroVoices()
+      .then((res) => {
+        if (!alive) return
+        setKokoroVoices(res.voices || [])
+        setKokoroRange(res.speed_range || [0.7, 1.3])
+        setKokoroDownloaded(!!res.downloaded)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+      previewAudio.current?.pause()
+    }
+  }, [])
+
+  async function changeEngine(next) {
+    if (next === engine) return
+    const previous = engine
+    setEngineState(next)
+    try {
+      await api.setEngine(next)
+      window.dispatchEvent(new Event(ENGINE_EVENT))
+      toast.success(
+        next === 'kokoro'
+          ? 'Kokoro speaks every deck now.'
+          : 'ElevenLabs speaks every deck now.'
+      )
+    } catch (e) {
+      setEngineState(previous)
+      setError(e.message || 'Could not switch the engine.')
+    }
+  }
+
+  // Synthesize a short sample on the server (cached there) and play it. The
+  // very first one downloads Kokoro's model, so it can take a minute.
+  async function playPreview() {
+    setPreviewing(true)
+    setError('')
+    try {
+      const res = await fetch(kokoroPreviewUrl(kokoroVoice, Number(kokoroSpeed)))
+      if (!res.ok) {
+        let detail = res.statusText
+        try {
+          detail = (await res.json()).detail || detail
+        } catch {
+          /* not JSON */
+        }
+        throw new Error(detail)
+      }
+      const url = URL.createObjectURL(await res.blob())
+      previewAudio.current?.pause()
+      previewAudio.current = new Audio(url)
+      setKokoroDownloaded(true)
+      await previewAudio.current.play()
+    } catch (e) {
+      setError(e.message || 'Could not play the preview.')
+    } finally {
+      setPreviewing(false)
+    }
+  }
 
   // Fetch the account's ElevenLabs voices (includes cloned voices).
   useEffect(() => {
@@ -99,8 +179,20 @@ export default function VoiceView({ project }) {
       style: Number(style),
       use_speaker_boost: speakerBoost,
       speed: Number(speed),
+      kokoro_voice: kokoroVoice,
+      kokoro_speed: Number(kokoroSpeed),
     }),
-    [voiceId, model, stability, similarity, style, speakerBoost, speed]
+    [
+      voiceId,
+      model,
+      stability,
+      similarity,
+      style,
+      speakerBoost,
+      speed,
+      kokoroVoice,
+      kokoroSpeed,
+    ]
   )
 
   // Autosave. Debounced, because the sliders fire on every pixel.
@@ -168,6 +260,137 @@ export default function VoiceView({ project }) {
   return (
     <div className="animate-fadein space-y-3">
       <ErrorBanner message={error} />
+
+      <Card className="p-5">
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="text-base font-extrabold tracking-tight text-navy">
+            Voice engine
+          </h2>
+          {saved && engine === 'kokoro' && (
+            <span className="flex items-center gap-1.5 text-xs font-medium text-green-600">
+              <Check className="h-3.5 w-3.5" strokeWidth={3} /> Settings saved
+            </span>
+          )}
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {[
+            {
+              id: 'kokoro',
+              label: 'Kokoro',
+              hint: 'Free and open source. Runs on this computer: no account, no key, and the narration never leaves it. Fewer, plainer voices.',
+            },
+            {
+              id: 'elevenlabs',
+              label: 'ElevenLabs',
+              hint: 'Needs an account and API key; the free tier has a monthly quota. More natural, expressive voices, and voice cloning. The narration is sent to ElevenLabs.',
+            },
+          ].map((opt) => {
+            const active = engine === opt.id
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                disabled={engine === null}
+                onClick={() => changeEngine(opt.id)}
+                className={`rounded-lg border px-3 py-2.5 text-left transition ${
+                  active
+                    ? 'border-brand-600 bg-brand-50'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}
+              >
+                <span
+                  className={`block text-sm font-semibold ${
+                    active ? 'text-brand-700' : 'text-navy'
+                  }`}
+                >
+                  {opt.label}
+                </span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+                  {opt.hint}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        <p className="mt-3 text-xs text-muted">
+          Applies to every deck. Each deck keeps its settings for both engines,
+          so you can switch back without losing them.
+        </p>
+      </Card>
+
+      {engine === 'kokoro' && (
+        <Card className="p-5">
+          <h2 className="mb-4 text-base font-extrabold tracking-tight text-navy">
+            Kokoro voice
+          </h2>
+          <div className="grid gap-5 lg:grid-cols-2">
+            <Field label="Voice" hint="Grades are Kokoro's own, A best">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <select
+                    className={`${inputClass} appearance-none pr-9`}
+                    value={kokoroVoice}
+                    onChange={(e) => setKokoroVoice(e.target.value)}
+                  >
+                    {[...new Set(kokoroVoices.map((v) => v.group))].map((g) => (
+                      <optgroup key={g} label={g}>
+                        {kokoroVoices
+                          .filter((v) => v.group === g)
+                          .map((v) => (
+                            <option key={v.id} value={v.id}>
+                              {v.name} ({v.id}) — {v.grade}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ))}
+                    {kokoroVoices.length === 0 && (
+                      <option value={kokoroVoice}>{kokoroVoice}</option>
+                    )}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                </div>
+                <button
+                  type="button"
+                  onClick={playPreview}
+                  disabled={previewing}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-line bg-white px-4 py-2 text-sm font-semibold text-slate transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  {previewing ? <Spinner /> : <Play className="h-4 w-4" />} Preview
+                </button>
+              </div>
+              {!kokoroDownloaded && (
+                <p className="mt-1.5 text-xs text-muted">
+                  The first preview or Generate downloads Kokoro's model, about
+                  340 MB, once. That takes a minute or two.
+                </p>
+              )}
+            </Field>
+
+            <Field
+              label={`Speed — ${Number(kokoroSpeed).toFixed(2)}×`}
+              hint="Below 1 is slower, above 1 is faster"
+            >
+              <input
+                type="range"
+                min={kokoroRange[0]}
+                max={kokoroRange[1]}
+                step="0.05"
+                value={kokoroSpeed}
+                onChange={(e) => setKokoroSpeed(e.target.value)}
+                className="w-full accent-brand-600"
+              />
+            </Field>
+          </div>
+          <p className="mt-5 border-t border-line pt-4 text-xs text-muted">
+            Changing the voice or speed re-synthesizes the whole deck on the next
+            Generate. Kokoro runs on this computer, one slide at a time, so a long
+            deck takes a few minutes.
+          </p>
+        </Card>
+      )}
+
+      {engine === 'elevenlabs' && (
+        <>
 
       <Card className="p-5">
         <div className="mb-4 flex items-baseline justify-between">
@@ -468,6 +691,8 @@ export default function VoiceView({ project }) {
           never invalidates clips already generated.
         </p>
       </Card>
+        </>
+      )}
     </div>
   )
 }

@@ -5,7 +5,7 @@ A Claude plugin marketplace.
 | Plugin | What it does |
 |---|---|
 | `critique` | Reviews work Claude produced — a draft, a deck, or code — with parallel reviewer agents, argues against every finding, and publishes an HTML guide with the verdict and the options. |
-| `voiceover` | Turns a slide deck (one PDF) into a narrated MP4 plus a transcript. Claude writes the narration; a local app is where you edit it, pick an ElevenLabs voice, and generate. Needs an ElevenLabs API key. |
+| `voiceover` | Turns a slide deck (a PDF, or a reveal.js deck such as Quarto's revealjs .html) into a narrated MP4 plus a transcript. A PDF becomes still slides; a reveal.js deck is recorded with its animations. Claude writes the narration; a local app is where you edit it, pick a voice, and generate. Speaks with Kokoro (free, runs on your computer) or ElevenLabs (needs an API key), chosen at first use. |
 | `litdb` | A personal literature and notes knowledge base: hybrid keyword and semantic search over your papers and notes, with Zotero and PDF-folder import. |
 | `finance-data` | Fetches free financial, market and economic data — Yahoo Finance, FRED, SEC EDGAR, Ken French, FinnHub, Financial Modeling Prep — and saves it as CSV. |
 | `wrds` | Empirical asset-pricing data from WRDS (CRSP, Compustat) and Open Source Asset Pricing, as extractable Python builds. Needs a WRDS account. |

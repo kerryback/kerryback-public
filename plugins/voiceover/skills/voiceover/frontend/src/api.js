@@ -32,21 +32,21 @@ export const api = {
   // ---- decks ----
   listProjects: () => request('api/projects'),
   getProject: (id) => request(`api/projects/${id}`),
-  // Start a new deck from a PDF chosen in the browser — the Upload screen with
+  // Start a new deck from a file chosen in the browser (a PDF, or a reveal.js .html or .zip) — the Upload screen with
   // no deck open, which is where a bare launch begins.
   createDeck: (file) => {
     const fd = new FormData()
     fd.append('file', file)
     return request('api/projects/upload', { method: 'POST', body: fd })
   },
-  // Upload an edited PDF into an existing deck: same deck, same settings, script
+  // Upload an edited deck into an existing deck: same deck, same settings, script
   // carried across slide by slide by content (see the backend's jobs._carry_over).
-  uploadPdf: (id, file) => {
+  uploadDeck: (id, file) => {
     const fd = new FormData()
     fd.append('file', file)
-    return request(`api/projects/${id}/pdf`, { method: 'POST', body: fd })
+    return request(`api/projects/${id}/deck`, { method: 'POST', body: fd })
   },
-  // Re-read the PDF from the path the deck was opened with — for a deck the
+  // Re-read the deck from the path the deck was opened with — for a deck the
   // author re-exported in place.
   reload: (id) => request(`api/projects/${id}/reload`, { method: 'POST' }),
   saveConfig: (id, config) =>
@@ -75,6 +75,13 @@ export const api = {
       body: { indexes: indexes ?? null },
     }),
 
+  // ---- Text-to-speech engine: "kokoro" or "elevenlabs", account-wide ----
+  getEngine: () => request('api/tts/engine'),
+  setEngine: (engine) =>
+    request('api/tts/engine', { method: 'POST', body: { engine } }),
+  // Kokoro's English voices with its quality grades; preview is an MP3 URL.
+  kokoroVoices: () => request('api/tts/kokoro/voices'),
+
   // ---- ElevenLabs voices (account + cloned) for the voice picker ----
   listVoices: () => request('api/tts/voices'),
   // Resolve a pasted Voice Library id to its name, labels and preview clip.
@@ -94,6 +101,11 @@ export const api = {
 // URL helpers (also relative)
 export const videoUrl = (id) => `api/projects/${id}/video`
 export const eventsUrl = (id) => `api/projects/${id}/events`
+export const kokoroPreviewUrl = (voice, speed) =>
+  `api/tts/kokoro/preview/${encodeURIComponent(voice)}?speed=${speed}`
+
+// Fired on window when the engine changes, so the key banner can follow it.
+export const ENGINE_EVENT = 'voiceover:engine'
 
 // Normalize a server-provided URL to a relative path (drop a leading slash) so
 // it resolves correctly behind a sub-path.

@@ -1,7 +1,7 @@
 {
   "name": "voiceover",
-  "description": "Turn a slide deck into a narrated MP4 video plus a transcript. Give it the PDF of your slides — named on the command line or uploaded in the app — and Claude writes the narration; a local app shows each slide beside its script, where you edit it, pick an ElevenLabs voice, and generate. The MP4 + transcript are saved to the project folder.",
-  "version": "3.6.0",
+  "description": "Turn a slide deck into a narrated MP4 video plus a transcript. Give it a PDF of your slides or a reveal.js deck (such as Quarto's revealjs .html) — named on the command line or uploaded in the app — and Claude writes the narration; a local app shows each slide beside its script, where you edit it, pick a voice — Kokoro, free and run on your computer, or ElevenLabs with an API key — and generate. A PDF becomes still slides; a reveal.js deck is recorded in Chrome with its fragments and animations, each fragment timed to the narration. The MP4 + transcript are saved to the project folder.",
+  "version": "4.0.0",
   "author": {
     "name": "Kerry Back"
   }

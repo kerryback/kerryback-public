@@ -175,7 +175,7 @@ export function ErrorBanner({ message, onRetry }) {
   )
 }
 
-// What the last re-uploaded PDF did to the deck, above the narration editor.
+// What the last re-uploaded deck did to its slides, above the narration editor.
 export function ReviewSummary({ review, children }) {
   if (!review?.total) return null
   return (
@@ -188,7 +188,7 @@ export function ReviewSummary({ review, children }) {
           />
           <div className="text-sm">
             <p className="font-semibold text-navy">
-              New PDF — {describeReview(review)}
+              Deck read again — {describeReview(review)}
             </p>
             <p className="mt-0.5 text-muted">
               {review.unchanged} slide{review.unchanged === 1 ? '' : 's'} kept
@@ -198,7 +198,7 @@ export function ReviewSummary({ review, children }) {
             {review.suspect_rerender && (
               <p className="mt-1.5 text-amber-700">
                 Most slides came back with the same words but a different
-                rendering, which usually means the PDF was re-exported rather
+                rendering, which usually means the deck was re-exported rather
                 than rewritten. Check a flagged slide before redrafting the
                 whole deck.
               </p>

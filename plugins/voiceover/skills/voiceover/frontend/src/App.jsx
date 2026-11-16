@@ -96,9 +96,9 @@ function Shell() {
     if (!project) return
     try {
       const status = await api.ttsStatus()
-      if (!status.configured) {
+      if (!status.ready) {
         toast.error(
-          'Add your ElevenLabs API key first — the banner at the top of the page.'
+          'Add your ElevenLabs API key first (the banner at the top of the page), or switch to Kokoro under Audio settings.'
         )
         return
       }
@@ -159,7 +159,7 @@ function Shell() {
   }, [blocked, project])
 
   // No deck yet: the top bar would have nothing to act on, so the Upload screen
-  // is the whole app until a PDF arrives.
+  // is the whole app until a deck arrives.
   if (!projectId) {
     return (
       <div className="min-h-full flex flex-col">
@@ -239,7 +239,7 @@ function Shell() {
               />
             ) : project.state === 'loading' && !project.slides?.length ? (
               <div className="flex items-center justify-center gap-2 py-24 text-muted">
-                <Spinner className="h-5 w-5 text-brand-blue" /> Reading the PDF…
+                <Spinner className="h-5 w-5 text-brand-blue" /> Reading the deck…
               </div>
             ) : screen === 'upload' ? (
               <UploadView
@@ -286,7 +286,7 @@ function BareBar() {
             Voiceover
           </span>
           <span className="block text-[0.7rem] text-white/60">
-            Upload a PDF to begin
+            Upload a PDF or a reveal.js deck to begin
           </span>
         </Brand>
       </div>
@@ -314,12 +314,12 @@ function TopBar({
           <span className="block truncate text-sm font-extrabold leading-tight tracking-tight">
             {project?.name || 'Voiceover'}
           </span>
-          {files?.pdf && (
+          {files?.deck && (
             <span
               className="block truncate text-[0.7rem] text-white/60"
-              title={files.source_dir || files.pdf}
+              title={files.source_dir || files.deck}
             >
-              {files.pdf}
+              {files.deck}
             </span>
           )}
         </Brand>
@@ -384,12 +384,12 @@ function TopBar({
                   }`}
                 >
                   <Icon className="h-3.5 w-3.5" /> {s.label}
-                  {/* The one thing worth a dot up here: the PDF on disk moved on
+                  {/* The one thing worth a dot up here: the deck file on disk moved on
                       without the app. */}
                   {s.key === 'upload' && changed && (
                     <span
                       className="h-1.5 w-1.5 rounded-full bg-accent-500"
-                      aria-label="The PDF changed on disk"
+                      aria-label="The deck file changed on disk"
                     />
                   )}
                 </button>
@@ -477,8 +477,8 @@ function BuildFailed({ project, onRetry }) {
   )
 }
 
-// A PDF that can't be read is nearly always a file that isn't really a PDF, or
-// one that is encrypted. Say what happened and point at the one screen that can
+// A deck that can't be read is nearly always a file that isn't really a PDF
+// (or is encrypted), or a reveal.js deck whose _files folder didn't come along. Say what happened and point at the one screen that can
 // fix it.
 function LoadFailed({ project, onReupload }) {
   const message = (project.log || '').split('\n')[0]
@@ -488,14 +488,14 @@ function LoadFailed({ project, onReupload }) {
         <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-extrabold tracking-tight text-navy">
-            Couldn&apos;t read this PDF
+            Couldn&apos;t read this deck
           </h2>
           <p className="mt-1.5 whitespace-pre-wrap text-sm text-slate">
-            {message || 'The PDF could not be read.'}
+            {message || 'The deck could not be read.'}
           </p>
           <div className="mt-4">
             <Button onClick={onReupload}>
-              <Upload className="h-4 w-4" /> Upload a PDF
+              <Upload className="h-4 w-4" /> Upload a deck
             </Button>
           </div>
         </div>

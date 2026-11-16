@@ -1,7 +1,16 @@
 """Per-slide TTS audio generation.
 
-Synthesizes one ElevenLabs MP3 per slide that has narration, parameterized by
-voice_id + model + voice settings.
+Synthesizes one MP3 per slide that has narration, with the account's engine:
+ElevenLabs (voice_id + model + voice settings) or Kokoro (voice + speed, run
+locally; see kokoro.py).
+
+A reveal.js deck is built with `timed=True`: every clip also gets a timing file
+beside it (`<name>.json`, one start time per character), which the recorder
+uses to fire each `[next]` marker at the word it sits before. ElevenLabs then
+uses its with-timestamps endpoint; Kokoro, which returns no timestamps, speaks
+the text in pieces cut at the markers (synthesize_kokoro_timed). The text spoken
+is the narration with its markers stripped (markers.split). A PDF deck is built
+without timings, exactly as before.
 
 Each MP3 is named for a sha of the text it speaks plus the voice signature, so
 the audio directory is a content-addressed cache: a rebuild re-synthesizes only
@@ -9,6 +18,7 @@ what actually changed, and — because nothing is keyed by slide position —
 inserting or reordering slides reuses every clip that still says the same thing
 in the same voice.
 """
+import base64
 import hashlib
 import json
 import os
@@ -20,9 +30,11 @@ from pathlib import Path
 
 import httpx
 
-from . import config
+from . import config, kokoro, markers
 
 ELEVEN_TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream"
+# The same voice with character timestamps, for a reveal.js deck's markers.
+ELEVEN_TIMED_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/with-timestamps"
 OUTPUT_FORMAT = "mp3_44100_128"
 
 # Transient failures worth another try: 429 is the per-plan concurrency/rate cap,
@@ -100,6 +112,59 @@ def _voice_sig(voice_id: str, model: str, settings: dict) -> str:
     return f"{voice_id}|{model}|{fields}"
 
 
+def _kokoro_settings(k: dict | None) -> dict:
+    k = k or {}
+    return {"voice": k.get("voice") or kokoro.DEFAULT_VOICE,
+            "speed": kokoro.clamp_speed(k.get("speed", kokoro.DEFAULT_SPEED))}
+
+
+def _kokoro_sig(k: dict) -> str:
+    """Kokoro's counterpart of _voice_sig. The "kokoro|" prefix keeps the two
+    engines' clips apart in the cache: a switch of engine re-synthesizes, and a
+    Kokoro clip is never served for an ElevenLabs build or the reverse."""
+    return f"kokoro|{k['voice']}|speed={k['speed']}"
+
+
+def timing_path(mp3: Path) -> Path:
+    """The character timestamps saved beside a clip."""
+    return mp3.with_suffix(".json")
+
+
+def read_timing(mp3: Path) -> dict:
+    try:
+        return json.loads(timing_path(mp3).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def synthesize_kokoro_timed(text: str, offsets: list, out_path: Path, k: dict) -> None:
+    """One Kokoro clip of `text`, and its timings beside it.
+
+    Kokoro returns no character timestamps, so the text is spoken in pieces cut
+    at the [next] markers' offsets and joined: each marker then falls exactly
+    where its piece starts. The timing file has the same shape as ElevenLabs'
+    (`alignment.character_start_times_seconds`, one per character), exact at
+    every marker and spread evenly between them, so markers.times reads both
+    engines alike. The mp3 is written first and the timing file last; the cache
+    treats a clip without its timings as missing.
+    """
+    bounds = [0] + sorted(min(max(o, 0), len(text)) for o in offsets) + [len(text)]
+    pieces = [text[a:b] for a, b in zip(bounds, bounds[1:])]
+    at = kokoro.synthesize_segments(pieces, out_path, k["voice"], k["speed"])
+    starts = []
+    for i, piece in enumerate(pieces):
+        span = at[i + 1] - at[i]
+        starts += [at[i] + span * j / len(piece) for j in range(len(piece))]
+    json_path = timing_path(out_path)
+    tmp_json = json_path.with_name(json_path.name + ".part")
+    tmp_json.write_text(json.dumps({
+        "text": text, "engine": "kokoro",
+        "alignment": {"characters": list(text),
+                      "character_start_times_seconds": starts},
+    }), encoding="utf-8")
+    os.replace(tmp_json, json_path)
+
+
 def synthesize(text: str, out_path: Path, voice_id: str, model: str,
                settings: dict | None = None, cancel=None) -> None:
     """Stream one ElevenLabs MP3 to out_path. Reads ELEVENLABS_API_KEY.
@@ -166,9 +231,93 @@ def synthesize(text: str, out_path: Path, voice_id: str, model: str,
     raise RuntimeError(f"{last_error} (gave up after {MAX_ATTEMPTS} attempts)")
 
 
+def synthesize_timed(text: str, out_path: Path, voice_id: str, model: str,
+               settings: dict | None = None, cancel=None) -> None:
+    """Write one ElevenLabs MP3 to out_path, and its timings beside it. Reads ELEVENLABS_API_KEY.
+
+    `settings` is passed through to voice_settings as given. Note that v3 defines
+    only three stability levels (0.0 / 0.5 / 1.0) while the v2-family models take
+    a continuous 0–1; the API accepts in-between values on v3 without erroring, so
+    nothing is snapped here — the picker offers the defined levels instead.
+
+    `cancel` (a threading.Event) is checked between attempts, never mid-stream:
+    a request already sent is billed, so it is allowed to land in the cache.
+    """
+    if not config.ELEVENLABS_API_KEY:
+        raise RuntimeError(
+            "ELEVENLABS_API_KEY is not set — paste your key in the app's banner, "
+            "or export it in your shell.")
+    merged = _merged_settings(settings)
+    url = ELEVEN_TIMED_URL.format(voice_id=voice_id)
+    headers = {"xi-api-key": config.ELEVENLABS_API_KEY}
+    payload = {
+        "text": text,
+        "model_id": model,
+        "voice_settings": {k: merged[k] for k in VOICE_SETTING_KEYS},
+    }
+    params = {"output_format": OUTPUT_FORMAT}
+    # Write to sibling .part files and rename only once complete. The cache
+    # decides a clip exists by filename alone, so a half-written mp3 left by a
+    # failed attempt would be reused forever as a truncated slide. The timing
+    # file is renamed first, so an mp3 never exists without its timings.
+    tmp_path = out_path.with_name(out_path.name + ".part")
+    json_path = timing_path(out_path)
+    tmp_json = json_path.with_name(json_path.name + ".part")
+    last_error = ""
+    try:
+        for attempt in range(MAX_ATTEMPTS):
+            wait = None
+            try:
+                response = httpx.post(url, headers=headers, json=payload,
+                                      params=params, timeout=180.0)
+                if response.status_code == 200:
+                    body = response.json()
+                    tmp_path.write_bytes(base64.b64decode(body["audio_base64"]))
+                    tmp_json.write_text(json.dumps({
+                        "text": text,
+                        "alignment": body.get("alignment") or {},
+                    }), encoding="utf-8")
+                    os.replace(tmp_json, json_path)
+                    os.replace(tmp_path, out_path)
+                    return
+                last_error = (f"ElevenLabs TTS error "
+                              f"({response.status_code}): {response.text[:300]}")
+                if response.status_code not in RETRY_STATUSES:
+                    raise RuntimeError(last_error)
+                wait = _retry_delay(response, attempt)
+            except (httpx.HTTPError, ValueError, KeyError) as e:
+                # Dropped, never connected, or a garbled body — same treatment.
+                last_error = f"ElevenLabs request failed: {e}"
+                wait = _retry_delay(None, attempt)
+            if attempt == MAX_ATTEMPTS - 1:
+                break
+            # Wait on the cancel flag rather than sleeping, so Stop doesn't sit
+            # out a backoff of up to 16 seconds.
+            if cancel is not None:
+                if cancel.wait(wait):
+                    raise Cancelled()
+            else:
+                time.sleep(wait)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+        tmp_json.unlink(missing_ok=True)
+    raise RuntimeError(f"{last_error} (gave up after {MAX_ATTEMPTS} attempts)")
+
+
 def generate(slides: list, audio_dir: Path, voice_id: str, model: str,
-             settings: dict | None = None, progress=None, cancel=None) -> dict:
+             settings: dict | None = None, progress=None, cancel=None,
+             engine: str = "elevenlabs", kokoro_settings: dict | None = None,
+             timed: bool = False) -> dict:
     """(Re)synthesize audio for `slides`, write the manifest, prune the cache.
+
+    engine: "elevenlabs" uses voice_id, model and settings; "kokoro" uses
+    kokoro_settings ({"voice", "speed"}) and needs no key.
+
+    timed: a reveal.js deck. The narration's [next] markers are stripped before
+    speaking, and every clip gets a timing file beside it. A Kokoro clip is
+    spoken in pieces cut at the markers, so its name also covers where the
+    markers sit: moving one re-speaks that slide. An ElevenLabs clip's name
+    covers only the spoken text.
 
     `slides` is the deck's narration — {index, narration, ...} — in any order.
     Slides with no narration get no audio and are shown silently in the video.
@@ -180,23 +329,32 @@ def generate(slides: list, audio_dir: Path, voice_id: str, model: str,
     """
     audio_dir.mkdir(parents=True, exist_ok=True)
     merged = _merged_settings(settings)
-    sig = _voice_sig(voice_id, model, merged)
+    ksettings = _kokoro_settings(kokoro_settings)
+    use_kokoro = engine == "kokoro"
+    sig = _kokoro_sig(ksettings) if use_kokoro else _voice_sig(voice_id, model, merged)
 
     manifest = []
-    tasks = {}       # filename -> text still to synthesize (deduped)
+    tasks = {}       # filename -> (text, marker offsets) still to synthesize
     keep = set()
     narrated = 0
 
     for s in sorted(slides, key=lambda s: s["index"]):
-        text = (s.get("narration") or "").strip()
+        if timed:
+            text, offsets = markers.split(s.get("narration") or "")
+        else:
+            text, offsets = (s.get("narration") or "").strip(), []
         entry = {"index": s["index"], "file": None, "words": len(text.split())}
         if text:
             narrated += 1
-            filename = f"{_sha(text + chr(0) + sig)[:32]}.mp3"
+            key = text + chr(0) + sig
+            if timed and use_kokoro:
+                key += chr(0) + ",".join(map(str, offsets))
+            filename = f"{_sha(key)[:32]}.mp3"
             entry["file"] = filename
             keep.add(filename)
-            if not (audio_dir / filename).exists():
-                tasks[filename] = text
+            clip = audio_dir / filename
+            if not (clip.exists() and (not timed or timing_path(clip).exists())):
+                tasks[filename] = (text, offsets)
         manifest.append(entry)
 
     # Two slides with identical narration share one clip, so `skipped` counts every
@@ -213,18 +371,38 @@ def generate(slides: list, audio_dir: Path, voice_id: str, model: str,
 
     lock = threading.Lock()
 
+    # Kokoro's first use downloads and loads the model, which takes a while
+    # with nothing to count. Say so, rather than sit at "0 of N".
+    if use_kokoro and tasks and not kokoro.loaded():
+        if progress:
+            note = ("Loading the Kokoro voice" if kokoro.downloaded() else
+                    f"Downloading the Kokoro voice model (about "
+                    f"{kokoro.DOWNLOAD_MB} MB, first time only)")
+            progress(done, total, note)
+
     def _render(item):
         nonlocal done
-        filename, text = item
+        filename, (text, offsets) = item
         _check(cancel)
-        synthesize(text, audio_dir / filename, voice_id, model, merged, cancel)
+        out = audio_dir / filename
+        if timed and use_kokoro:
+            synthesize_kokoro_timed(text, offsets, out, ksettings)
+        elif timed:
+            synthesize_timed(text, out, voice_id, model, merged, cancel)
+        elif use_kokoro:
+            kokoro.synthesize(text, out, ksettings["voice"], ksettings["speed"])
+        else:
+            synthesize(text, out, voice_id, model, merged, cancel)
         with lock:
             done += 1
             if progress:
                 progress(done, total, "Generating audio")
 
     if tasks:
-        workers = max(1, min(config.TTS_CONCURRENCY, len(tasks)))
+        # Kokoro runs on this computer's CPU, one clip at a time (kokoro.py
+        # serializes it anyway); the concurrency setting is ElevenLabs' cap.
+        cap = 1 if use_kokoro else config.TTS_CONCURRENCY
+        workers = max(1, min(cap, len(tasks)))
         with ThreadPoolExecutor(max_workers=workers) as ex:
             futures = [ex.submit(_render, item) for item in tasks.items()]
             try:
@@ -250,9 +428,11 @@ def _prune(audio_dir: Path, keep: set) -> None:
     """Drop clips no slide points at any more. The cache is only worth keeping
     for the current deck: an old clip can never be hit again, because its name
     encodes text that no slide says."""
-    for mp3 in audio_dir.glob("*.mp3"):
-        if mp3.name not in keep:
+    for f in list(audio_dir.glob("*.mp3")) + list(audio_dir.glob("*.json")):
+        if f.name == "manifest.json":
+            continue
+        if f.with_suffix(".mp3").name not in keep:
             try:
-                mp3.unlink()
+                f.unlink()
             except OSError:
                 pass

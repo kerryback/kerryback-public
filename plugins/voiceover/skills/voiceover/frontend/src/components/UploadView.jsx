@@ -7,8 +7,13 @@ import { useToast } from './Toast'
 import { Button, Card, ErrorBanner, ProgressBar, Spinner, StatePill } from './ui'
 
 // Upload: where a deck comes in. Two modes, one component —
-//   no deck open   → the PDF starts a new deck (a bare launch lands here)
-//   a deck open    → the PDF replaces this deck's slides
+//   no deck open   → the file starts a new deck (a bare launch lands here)
+//   a deck open    → the file replaces this deck's slides
+//
+// The file type picks the format: a PDF, or a reveal.js deck. A browser upload
+// is one file, and a rendered Quarto deck is an .html plus a _files folder, so a
+// reveal.js upload is a .zip of the folder, or a self-contained .html. A deck
+// opened by path (the usual way, from Claude Code) needs neither.
 //
 // Replacing is deliberately not starting over. The new pages are matched against
 // the old ones by content, so a page that didn't change keeps its narration and
@@ -48,7 +53,7 @@ export default function UploadView({ project, refresh, onDone, onOpen }) {
       },
       onError: async (err, evt) => {
         setError(evt?.message || err.message)
-        toast.error("Couldn't read that PDF.")
+        toast.error("Couldn't read that deck.")
         await refresh()
       },
     })
@@ -56,14 +61,16 @@ export default function UploadView({ project, refresh, onDone, onOpen }) {
   const upload = async (file) => {
     if (!file) return
     setError('')
-    if (!/\.pdf$/i.test(file.name)) {
-      setError(`${file.name} isn't a PDF. Export your slides to PDF first.`)
+    if (!/\.(pdf|html?|zip)$/i.test(file.name)) {
+      setError(
+        `${file.name} isn't a deck this app reads. Upload a PDF of your slides (for PowerPoint or Keynote, export to PDF first), or a reveal.js deck: a self-contained .html, or a .zip of the folder holding the .html and its _files folder.`
+      )
       return
     }
     setBusy(true)
     try {
       if (project) {
-        await api.uploadPdf(project.id, file)
+        await api.uploadDeck(project.id, file)
         await refresh()
         watch(project.id)
       } else {
@@ -99,12 +106,12 @@ export default function UploadView({ project, refresh, onDone, onOpen }) {
         </Card>
       )}
 
-      {/* The author re-exported the PDF in place — offer the file they
+      {/* The author re-exported or re-rendered the deck in place — offer the file they
           already have rather than making them find it in a picker. */}
       {project && files.changed && !files.missing && (
         <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
           <span className="text-sm text-slate">
-            <span className="font-semibold text-navy">{files.pdf}</span> has
+            <span className="font-semibold text-navy">{files.deck}</span> has
             changed on disk since the app read it.
           </span>
           <Button variant="ghost" onClick={rereadFromDisk} disabled={running}>
@@ -115,23 +122,26 @@ export default function UploadView({ project, refresh, onDone, onOpen }) {
 
       <Card className="p-6">
         <h2 className="text-base font-extrabold tracking-tight text-navy">
-          {project ? 'Upload the PDF again' : 'Upload a PDF'}
+          {project ? 'Upload the deck again' : 'Upload a deck'}
         </h2>
         <p className="mt-1.5 max-w-2xl text-sm text-muted">
           {project ? (
             <>
-              Changed your slides? Export them to PDF again and drop it here.
-              Nothing you have written is thrown away: each new page is matched
-              against the old deck by content, so a page that didn&apos;t change
-              keeps its narration <em>and</em> the audio already spoken for it.
-              Only pages that changed — or are new — come back flagged for
-              another look.
+              Changed your slides? Export or render them again and drop the new
+              file here. Nothing you have written is thrown away: each slide is
+              matched against the old deck by content, so a slide that
+              didn&apos;t change keeps its narration <em>and</em> the audio
+              already spoken for it. Only slides that changed — or are new —
+              come back flagged for another look.
             </>
           ) : (
             <>
-              A deck is one file: the PDF you exported from your slides. Drop it
-              here and the app reads a page image per slide; the narration is
-              written here in the app, so there is nothing to keep in sync.
+              Drop a PDF of your slides, exported from any slide tool, and each
+              page becomes a still image in the video. Or drop a reveal.js deck,
+              such as the .html Quarto renders for a revealjs presentation (a
+              .zip of the folder with its _files folder, or a self-contained
+              .html), and the video is recorded in Chrome with its animations.
+              The narration is written here in the app.
             </>
           )}
         </p>
@@ -160,16 +170,16 @@ export default function UploadView({ project, refresh, onDone, onOpen }) {
             <FileUp className="h-7 w-7 text-brand-600" aria-hidden="true" />
           )}
           <span className="text-sm font-semibold text-navy">
-            Drop the PDF here, or click to choose it
+            Drop the PDF, .html or .zip here, or click to choose it
           </span>
           <span className="text-xs text-muted">
-            PDF only — it is what every slide tool exports faithfully
+            Easier still: ask Claude Code to open the deck by its path
           </span>
         </div>
         <input
           ref={fileRef}
           type="file"
-          accept="application/pdf,.pdf"
+          accept="application/pdf,.pdf,.html,.htm,.zip,text/html,application/zip"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0]
@@ -182,7 +192,7 @@ export default function UploadView({ project, refresh, onDone, onOpen }) {
           <p className="mt-5 border-t border-line pt-4 text-xs text-muted">
             Currently narrating{' '}
             <span className="font-semibold text-slate">
-              {files.pdf || 'this deck'}
+              {files.deck || 'this deck'}
             </span>
             {files.source_dir ? ` from ${files.source_dir}` : ''} ·{' '}
             {project.slides?.length || 0} slides
@@ -209,7 +219,7 @@ export default function UploadView({ project, refresh, onDone, onOpen }) {
                   {d.name}
                 </span>
                 <span className="block truncate text-xs text-muted">
-                  {d.files?.pdf}
+                  {d.files?.deck}
                 </span>
               </span>
               <StatePill state={d.state} stale={d.stale} />

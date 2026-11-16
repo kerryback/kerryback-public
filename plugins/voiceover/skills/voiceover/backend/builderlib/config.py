@@ -67,7 +67,8 @@ PROJECTS_DIR = DATA_DIR / "decks"
 
 # Narration is written and revised by the Claude Code agent that launches this
 # skill (it edits via the narration API), so the app itself makes no LLM calls
-# and needs no Anthropic key. Only ElevenLabs (TTS) is required.
+# and needs no Anthropic key. The ElevenLabs key is needed only when ElevenLabs
+# is the engine; Kokoro needs none.
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
 
 # When set (by the skill launcher = the author's working directory), each
@@ -84,6 +85,18 @@ OUTPUT_DIR = os.environ.get("VOICEOVER_OUTPUT_DIR", "")
 TTS_CONCURRENCY = int(os.environ.get("TTS_CONCURRENCY", "2"))
 # Parallel ffmpeg slide-segment encodes during video render (CPU-bound).
 VIDEO_CONCURRENCY = int(os.environ.get("VIDEO_CONCURRENCY", "4"))
+
+# Which text-to-speech engine speaks the narration: "kokoro" (open source, runs
+# on this computer, no account) or "elevenlabs" (an API key and a cloud call).
+# Account-wide like the key, stored as TTS_ENGINE in ~/.voiceover/.env; an
+# exported TTS_ENGINE wins. Unset, it follows the key, so an install that already
+# has an ElevenLabs key keeps speaking with ElevenLabs. See tts_engine().
+ENGINES = ("kokoro", "elevenlabs")
+TTS_ENGINE = os.environ.get("TTS_ENGINE", "").strip().lower()
+
+# Kokoro's model files, downloaded once on first use. Outside the skill
+# directory for the same reason as the key: an update must not delete them.
+KOKORO_MODELS_DIR = HOME_DIR / "models"
 
 # React SPA build output (optional; served at / when present).
 FRONTEND_DIST = BACKEND_DIR.parent / "frontend" / "dist"
@@ -127,6 +140,32 @@ def set_tts_concurrency(n: int) -> None:
     TTS_CONCURRENCY = n
     os.environ["TTS_CONCURRENCY"] = str(n)
     _upsert_env("TTS_CONCURRENCY", str(n))
+
+
+def tts_engine() -> str:
+    """The engine in force: the saved or exported choice, else ElevenLabs when a
+    key is configured and Kokoro when not. Resolved on every call, so pasting a
+    key into an install that never chose still behaves as it did before engines
+    existed."""
+    if TTS_ENGINE in ENGINES:
+        return TTS_ENGINE
+    return "elevenlabs" if ELEVENLABS_API_KEY else "kokoro"
+
+
+def tts_engine_chosen() -> bool:
+    """Whether the author (or their shell) has named an engine."""
+    return TTS_ENGINE in ENGINES
+
+
+def set_tts_engine(engine: str) -> None:
+    """Persist the engine to ~/.voiceover/.env and switch to it live."""
+    global TTS_ENGINE
+    engine = (engine or "").strip().lower()
+    if engine not in ENGINES:
+        raise ValueError(f"Unknown engine {engine!r}; expected one of {ENGINES}.")
+    TTS_ENGINE = engine
+    os.environ["TTS_ENGINE"] = engine
+    _upsert_env("TTS_ENGINE", engine)
 
 
 def set_elevenlabs_key(key: str) -> None:

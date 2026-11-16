@@ -1,10 +1,13 @@
 """Per-deck file I/O: narration.json, fingerprints.json, config.json, meta.json.
 
-A deck folder holds everything the app owns: the PDF it ingested, the page PNGs
-rendered from it, the narration script, the per-slide content fingerprints used
-to carry that script across a re-upload, the TTS audio, and the voice settings.
+A deck folder holds everything the app owns: the slide images (rendered from a
+PDF's pages, or taken from a reveal.js deck in headless Chrome), the narration
+script, the per-slide content fingerprints used to carry that script across a
+re-upload, the TTS audio, and the voice settings. A PDF deck also keeps its PDF
+here; a reveal.js deck is read where it is, or from an unpacked upload.
 
-The narration lives here, not in a source deck — the PDF has nowhere to put it.
+The narration lives here, not in a source deck: a PDF has nowhere to put it, and
+a rendered reveal.js file is rewritten on every Quarto render.
 That makes this folder the single copy, edited in the app (autosaved) or by
 Claude Code through the narration API.
 """
@@ -31,7 +34,19 @@ DEFAULT_CONFIG = {
     "style": 0.5,
     "use_speaker_boost": True,
     "speed": 1.0,
+    # Kokoro voice + speed, used when the account's engine is Kokoro. Both sets
+    # are kept on the deck, so switching engine and back loses neither.
+    "kokoro_voice": "af_heart",
+    "kokoro_speed": 1.0,
 }
+
+# The settings each engine's audio depends on. The build signature covers only
+# the engine in force, so tuning the idle engine's settings does not mark the
+# video stale, and an ElevenLabs deck built before engines existed keeps the
+# signature it was stamped with.
+ELEVEN_KEYS = ("voice_id", "model", "stability", "similarity_boost", "style",
+               "use_speaker_boost", "speed")
+KOKORO_KEYS = ("kokoro_voice", "kokoro_speed")
 
 
 def pdir(pid: str) -> Path:
@@ -69,6 +84,40 @@ def pdf_path(pid: str) -> Path:
     PDF also arrives by upload from the browser, which has no path to point at —
     and because an ingest must keep matching the page images it produced."""
     return pdir(pid) / "deck.pdf"
+
+
+# The two deck formats. The file type picks one when a deck arrives; meta.json
+# keeps it as source_type. A deck from before reveal.js decks were supported
+# has "pdf" or nothing, which both mean PDF.
+PDF = "pdf"
+REVEALJS = "revealjs"
+
+
+def deck_format(pid: str) -> str:
+    return REVEALJS if read_meta(pid).get("source_type") == REVEALJS else PDF
+
+
+def is_revealjs(pid: str) -> bool:
+    return deck_format(pid) == REVEALJS
+
+
+def upload_dir(pid: str) -> Path:
+    """Where an uploaded reveal.js deck (a self-contained .html, or an unpacked
+    .zip) lives. A reveal.js deck opened by path is not copied: its HTML leans
+    on a `_files` folder and sometimes on images above it, and only the
+    original location has all of them."""
+    return pdir(pid) / "upload"
+
+
+def deck_html(pid: str) -> Path | None:
+    """The reveal.js .html file the app reads and records: the original file for
+    a deck opened by path, the unpacked upload otherwise."""
+    meta = read_meta(pid)
+    if meta.get("source_path"):
+        return Path(meta["source_path"])
+    if meta.get("upload_html"):
+        return Path(meta["upload_html"])
+    return None
 
 
 def output_base(pid: str) -> str:
@@ -214,7 +263,7 @@ def write_config(pid: str, cfg: dict) -> dict:
 
 
 # --------------------------------------------------------------------------- #
-# Meta / the PDF this deck came from
+# Meta / the file this deck came from
 # --------------------------------------------------------------------------- #
 def read_meta(pid: str) -> dict:
     p = meta_path(pid)
@@ -226,10 +275,10 @@ def read_meta(pid: str) -> dict:
     return {}
 
 
-def source_pdf(pid: str) -> Path | None:
-    """Where the ingested PDF came from on disk, when it was opened by path
-    rather than uploaded through the browser. Kept so the app can notice a
-    re-export and offer to pick it up."""
+def source_file(pid: str) -> Path | None:
+    """Where the deck (a PDF or a reveal.js .html) came from on disk, when it was
+    opened by path rather than uploaded through the browser. Kept so the app
+    can notice a re-export or re-render and offer to pick it up."""
     src = read_meta(pid).get("source_path", "")
     return Path(src) if src else None
 
@@ -243,21 +292,26 @@ def _mtime(path: Path | None) -> float:
 
 def record_source(pid: str) -> None:
     """Snapshot the origin file's mtime, so a later re-export shows up as changed."""
-    db.update_project(pid, source_mtime=_mtime(source_pdf(pid)))
+    db.update_project(pid, source_mtime=_mtime(source_file(pid)))
 
 
 def file_status(pid: str) -> dict:
-    """What the app knows about the PDF behind this deck.
+    """What the app knows about the file behind this deck.
 
     `changed` is the useful one: the author edited their slides and exported
-    the PDF again, so the copy the app is narrating is out of date. It is an
-    offer, not an alarm — nothing breaks until they take it.
+    or rendered them again, so the slides the app is narrating are out of date.
+    For a PDF it is an offer, not an alarm: nothing breaks until they take it.
+    A reveal.js deck is recorded from the file itself, so Generate refuses until
+    the deck is read again (jobs._build), or the narration would not line up.
     """
     meta = read_meta(pid)
-    src = source_pdf(pid)
+    src = source_file(pid)
     now = _mtime(src)
+    name = src.name if src else meta.get("upload_name", "")
     return {
-        "pdf": src.name if src else meta.get("upload_name", ""),
+        "format": deck_format(pid),
+        "deck": name,
+        "pdf": name,
         "source_path": str(src) if src else "",
         "source_dir": str(src.parent) if src else "",
         "missing": bool(src and not src.is_file()),
@@ -271,13 +325,20 @@ def file_status(pid: str) -> dict:
 # --------------------------------------------------------------------------- #
 def build_signature(pid: str) -> str:
     """A sha over everything that determines the output: every slide's narration,
-    in order, plus the voice settings. Comparing it to the signature stored at
-    build time answers "is this video current?" without tracking edits one by
-    one."""
+    in order, plus the engine's voice settings, and for a reveal.js deck the deck
+    as last read. Comparing it to the signature stored at build time answers "is
+    this video current?" without tracking edits one by one. A PDF deck's
+    signature has no format line, so it is the same as before reveal.js decks
+    were supported and an existing video is not marked stale."""
     slides = sorted(read_narration(pid).get("slides", []), key=lambda s: s["index"])
     cfg = read_config(pid)
     parts = [f"{s['index']}:{s.get('narration', '')}" for s in slides]
-    parts += [f"{k}={cfg.get(k)}" for k in sorted(DEFAULT_CONFIG)]
+    if is_revealjs(pid):
+        parts.append(f"deck={read_meta(pid).get('deck_sha', '')}")
+    if config.tts_engine() == "kokoro":
+        parts += ["engine=kokoro"] + [f"{k}={cfg.get(k)}" for k in KOKORO_KEYS]
+    else:
+        parts += [f"{k}={cfg.get(k)}" for k in sorted(ELEVEN_KEYS)]
     return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()
 
 

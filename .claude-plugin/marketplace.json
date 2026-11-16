@@ -3,7 +3,7 @@
   "owner": {
     "name": "Kerry Back"
   },
-  "description": "Public plugins: a reviewer for work Claude produced, a narrated-video builder for slide decks, a personal literature knowledge base, free financial and economic data, WRDS research data, risk parity portfolios, a shared research repository, an email and calendar desk, and voice whiteboard tutors.",
+  "description": "Public plugins: a reviewer for work Claude produced, a narrated-video builder for PDF and reveal.js slide decks, a personal literature knowledge base, free financial and economic data, WRDS research data, risk parity portfolios, a shared research repository, an email and calendar desk, and voice whiteboard tutors.",
   "plugins": [
     {
       "name": "critique",
@@ -13,7 +13,7 @@
     {
       "name": "voiceover",
       "source": "./plugins/voiceover",
-      "description": "Turn a slide deck into a narrated MP4 video plus a transcript. Give it the PDF of your slides and Claude writes the narration; a local app shows each slide beside its script, where you edit it, pick an ElevenLabs voice, and generate. The MP4 and transcript are saved to your working directory."
+      "description": "Turn a slide deck into a narrated MP4 video plus a transcript. Give it a PDF of your slides or a reveal.js deck (such as the .html Quarto renders for a revealjs presentation) and Claude writes the narration; a local app shows each slide beside its script, where you edit it, pick a voice (Kokoro, free and run on your computer, or ElevenLabs with your own API key), and generate. A PDF becomes still slides; a reveal.js deck is recorded in headless Chrome with its fragments and animations, each fragment timed to the narration. The MP4 and transcript are saved to your working directory."
     },
     {
       "name": "litdb",
@@ -28,7 +28,7 @@
     {
       "name": "wrds",
       "source": "./plugins/wrds",
-      "description": "Empirical asset-pricing data from WRDS (CRSP v2/Compustat) and Open Source Asset Pricing: extractable Python building blocks for connect (without a 2FA prompt), pull, merge, market cap aggregated across share classes, the CRSP-Compustat link, book equity, accounting alignment and firm age — every query run against live WRDS. Surfaces the constructions that are genuine decisions rather than common practice (Ken French vs Drechsler's WRDS script vs OpenAP, and the 4- vs 6-month reporting lag) instead of picking silently, and ships twelve WRDS reference scripts."
+      "description": "Empirical asset-pricing data from WRDS (CRSP v2/Compustat) and Open Source Asset Pricing: extractable Python building blocks for connect (without a 2FA prompt), pull, merge, market cap aggregated across share classes, the CRSP-Compustat link, book equity, accounting alignment and firm age \u2014 every query run against live WRDS. Surfaces the constructions that are genuine decisions rather than common practice (Ken French vs Drechsler's WRDS script vs OpenAP, and the 4- vs 6-month reporting lag) instead of picking silently, and ships twelve WRDS reference scripts."
     },
     {
       "name": "risk-parity",
@@ -43,7 +43,7 @@
     {
       "name": "smithers",
       "source": "./plugins/smithers",
-      "description": "A personal email and calendar desk: your inbox split into what needs a reply, a 7-day calendar with multi-select delete, tasks, and a Compose tab. Claude Code reads your Gmail and Calendar through a local connector, writes a fresh overview of what’s ahead for the next seven days every time the app is opened, and parks drafted replies in Compose — you review and press Send. Sending mail, applying calendar proposals, and editing or deleting events are left to you; the skill's instructions, a hook, and a token in the app's page keep Claude from them."
+      "description": "A personal email and calendar desk: your inbox split into what needs a reply, a 7-day calendar with multi-select delete, tasks, and a Compose tab. Claude Code reads your Gmail and Calendar through a local connector, writes a fresh overview of what\u2019s ahead for the next seven days every time the app is opened, and parks drafted replies in Compose \u2014 you review and press Send. Sending mail, applying calendar proposals, and editing or deleting events are left to you; the skill's instructions, a hook, and a token in the app's page keep Claude from them."
     },
     {
       "name": "tutor",

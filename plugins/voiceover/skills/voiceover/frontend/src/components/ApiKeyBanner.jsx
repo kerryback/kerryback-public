@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
 import { KeyRound } from 'lucide-react'
-import { api } from '../api'
+import { api, ENGINE_EVENT } from '../api'
 import { Button, inputClass } from './ui'
 import { useToast } from './Toast'
 
-// App-wide notice shown when no ElevenLabs API key is configured. The app still
+// App-wide notice shown when ElevenLabs is the engine and no API key is
+// configured. With Kokoro, the open-source engine, no key is needed and the
+// banner stays hidden; it re-checks when the engine is switched on the Voice
+// screen. The app still
 // runs (convert, draft/edit narration), but audio and the video can't be
 // generated until a key is added. Rather than making the author hand-edit
 // a file, they paste the key here; the server validates it against
@@ -19,12 +22,16 @@ export default function ApiKeyBanner() {
 
   useEffect(() => {
     let alive = true
-    api
-      .ttsStatus()
-      .then((res) => alive && setConfigured(!!res.configured))
-      .catch(() => alive && setConfigured(true)) // don't nag on a transient error
+    const check = () =>
+      api
+        .ttsStatus()
+        .then((res) => alive && setConfigured(!!res.ready))
+        .catch(() => alive && setConfigured(true)) // don't nag on a transient error
+    check()
+    window.addEventListener(ENGINE_EVENT, check)
     return () => {
       alive = false
+      window.removeEventListener(ENGINE_EVENT, check)
     }
   }, [])
 
@@ -62,7 +69,8 @@ export default function ApiKeyBanner() {
             <p className="mt-1 text-xs leading-relaxed text-amber-800">
               You can still read the deck and write its narration. To
               generate the voice audio and build the video, this app needs an
-              ElevenLabs key. Don’t have one? Create a free account at{' '}
+              ElevenLabs key — or switch to Kokoro, the free voice that runs
+              on this computer, under Audio settings. Don’t have a key? Create a free account at{' '}
               <a
                 href="https://elevenlabs.io/app/settings/api-keys"
                 target="_blank"

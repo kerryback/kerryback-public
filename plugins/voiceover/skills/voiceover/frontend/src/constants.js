@@ -73,9 +73,9 @@ export const DEFAULT_TTS = {
 // Bounds for the expressive controls, mirrored in CONTRACT.md.
 export const SPEED_RANGE = { min: 0.7, max: 1.2, step: 0.05 }
 
-// Deck states. Loading reads the PDF; building makes the video.
+// Deck states. Loading reads the deck; building makes the video.
 export const STATE_LABELS = {
-  loading: ['bg-blue-50 text-brand-dark', 'Reading the PDF…'],
+  loading: ['bg-blue-50 text-brand-dark', 'Reading the deck…'],
   ready: ['bg-slate-100 text-slate-600', 'Ready'],
   load_failed: ['bg-red-50 text-red-600', "Couldn't read the deck"],
   building: ['bg-blue-50 text-brand-dark', 'Generating…'],
@@ -95,8 +95,19 @@ export const isFailedState = (state) =>
 // Speaking rate assumption for the ~seconds estimate (words per minute).
 export const WORDS_PER_MINUTE = 150
 
+// A [next] marker advances the deck to its next fragment. It is stripped
+// before the text is spoken, so it counts as neither a word nor a second.
+// Must match backend/builderlib/markers.py.
+export const MARKER_RE = /\[\s*next\s*\]/gi
+
+export const countMarkers = (text) => ((text || '').match(MARKER_RE) || []).length
+
 export const estimateSeconds = (text) => {
-  const words = (text || '').trim().split(/\s+/).filter(Boolean).length
+  const words = (text || '')
+    .replace(MARKER_RE, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length
   return { words, seconds: Math.round((words / WORDS_PER_MINUTE) * 60) }
 }
 
@@ -116,7 +127,7 @@ export const formatDuration = (seconds) => {
   return m ? `${m} min ${s} sec` : `${s} sec`
 }
 
-// Per-slide flags a re-uploaded PDF leaves behind: the slide's content moved, so
+// Per-slide flags a re-read deck leaves behind: the slide's content moved, so
 // its narration is carried over but wants another look. `null` means untouched.
 export const CHANGE_LABELS = {
   edited: { label: 'Edited', dot: 'bg-brand-600' },

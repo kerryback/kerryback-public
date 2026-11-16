@@ -1,4 +1,4 @@
-"""Voiceover Builder — FastAPI backend. Implements CONTRACT.md."""
+"""Voiceover — FastAPI backend. Implements CONTRACT.md."""
 import asyncio
 import json
 from pathlib import Path
@@ -8,12 +8,12 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from builderlib import config, db, deck, events, jobs, store
+from builderlib import config, db, deck, events, jobs, kokoro, markers, reveal_deck, store
 
 db.init()
 
 # No auth: this runs locally as a skill, launched per-deck by the author.
-app = FastAPI(title="Voiceover Builder")
+app = FastAPI(title="Voiceover")
 
 
 # --------------------------------------------------------------------------- #
@@ -33,78 +33,118 @@ async def list_projects():
     return [_summary(p) for p in db.list_projects()]
 
 
-def _ingest_pdf(pid: str, name: str, data: bytes, source_path: Path | None,
-                upload_name: str = "") -> dict:
-    """Write a PDF into the deck folder and start reading it.
+def _start_deck(pid: str, name: str, kind: str, source_path: Path | None = None,
+                upload: tuple[str, bytes] | None = None) -> dict:
+    """Point a deck at its file and start reading it.
 
-    Shared by all three ways a PDF arrives — the launcher's path, a browser
+    Shared by all three ways a deck arrives — the launcher's path, a browser
     upload, and re-reading an edited file from its original path. The deck keeps
     its id and its folder every time, which is what lets an existing script be
     carried onto the new slides (jobs._ingest).
+
+    `kind` comes from the file type (deck.deck_kind). A PDF is copied into the
+    deck folder. A reveal.js deck opened by path is read where it is, not
+    copied (store.upload_dir says why); an uploaded one is unpacked into the
+    deck folder.
     """
     config.project_dir(pid).mkdir(parents=True, exist_ok=True)
-    if db.get_project(pid) is None:
-        db.create_project(pid, name, "pdf", "loading")
-    store.pdf_path(pid).write_bytes(data)
-    db.update_project(pid, source_type="pdf",
-                      source_path=str(source_path.resolve()) if source_path else "",
-                      upload_name=upload_name)
+    created = db.get_project(pid) is None
+    if created:
+        db.create_project(pid, name, kind, "loading")
+    uname = upload[0] if upload else ""
+    if kind == store.PDF:
+        store.pdf_path(pid).write_bytes(upload[1] if upload else source_path.read_bytes())
+        db.update_project(pid, source_type=store.PDF,
+                          source_path=str(source_path.resolve()) if source_path else "",
+                          upload_name=uname, upload_html="")
+    elif upload is not None:
+        try:
+            html = reveal_deck.unpack_upload(uname, upload[1], store.upload_dir(pid))
+        except ValueError as e:
+            # A bad upload must not leave a half-made deck behind in the list.
+            if created:
+                import shutil
+                shutil.rmtree(config.project_dir(pid), ignore_errors=True)
+            raise HTTPException(400, str(e))
+        db.update_project(pid, source_type=store.REVEALJS, source_path="",
+                          upload_name=uname, upload_html=str(html))
+    else:
+        db.update_project(pid, source_type=store.REVEALJS,
+                          source_path=str(source_path.resolve()),
+                          upload_name="", upload_html="")
     jobs.start_ingest(pid)
     return _summary(db.get_project(pid))
 
 
 class OpenBody(BaseModel):
-    pdf: str
+    # The deck file: a PDF or a rendered reveal.js .html. `pdf` and `html` are
+    # older names for the same field.
+    deck: str | None = None
+    pdf: str | None = None
+    html: str | None = None
     name: str | None = None
     project: str | None = None
 
 
 @app.post("/api/projects")
 async def open_deck(body: OpenBody):
-    """Open (or reopen) a deck from a PDF already on disk — how the launcher
-    opens the deck the author named.
+    """Open (or reopen) a deck from a file already on disk — how the launcher
+    opens the deck the author named. A .pdf is read as a PDF deck; a .html as
+    a reveal.js deck.
 
-    `project` re-reads the PDF into an existing deck instead of deriving the
+    `project` re-reads the file into an existing deck instead of deriving the
     deck id from the filename, for a re-export saved under a different name
     (which would otherwise start a second deck from scratch).
     """
-    pdf = Path(body.pdf).expanduser()
-    if not pdf.is_file():
-        raise HTTPException(400, f"PDF not found: {pdf}")
-    if not deck.is_pdf(pdf):
+    given = body.deck or body.pdf or body.html
+    if not given:
+        raise HTTPException(400, "Name the deck file.")
+    path = Path(given).expanduser()
+    if not path.is_file():
+        raise HTTPException(400, f"Deck not found: {path}")
+    kind = deck.deck_kind(path)
+    if kind is None or path.suffix.lower() == ".zip":
         raise HTTPException(400, deck.NOT_PDF_MESSAGE)
     if body.project:
         if not db.get_project(body.project):
             raise HTTPException(404, "not found")
-        return _ingest_pdf(body.project, body.name or pdf.stem, pdf.read_bytes(),
-                           pdf)
-    pid = deck.deck_slug(pdf.stem)
-    return _ingest_pdf(pid, body.name or pdf.stem, pdf.read_bytes(), pdf)
+        return _start_deck(body.project, body.name or path.stem, kind, source_path=path)
+    pid = deck.deck_slug(path.stem)
+    return _start_deck(pid, body.name or path.stem, kind, source_path=path)
+
+
+async def _read_upload(file: UploadFile) -> tuple[str, str, bytes]:
+    """(kind, name, data) for an uploaded deck: a PDF, a self-contained
+    reveal.js .html, or a .zip of the folder holding a reveal.js deck."""
+    name = file.filename or "deck.pdf"
+    kind = deck.deck_kind(Path(name))
+    if kind is None:
+        raise HTTPException(400, deck.NOT_PDF_MESSAGE)
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "That file is empty.")
+    return kind, name, data
 
 
 @app.post("/api/projects/upload", status_code=202)
 async def upload_new_deck(file: UploadFile = File(...)):
-    """Start a new deck from a PDF uploaded in the browser — the Upload screen
+    """Start a new deck from a file uploaded in the browser — the Upload screen
     when no deck is open, which is how a bare launch (`/voiceover` with no deck
     named) gets its slides.
 
     The deck id is a slug of the uploaded filename, so uploading the same deck
     again reopens it rather than starting a second copy of it.
     """
-    name = file.filename or "deck.pdf"
-    if not deck.is_pdf(Path(name)):
-        raise HTTPException(400, deck.NOT_PDF_MESSAGE)
-    data = await file.read()
-    if not data:
-        raise HTTPException(400, "That file is empty.")
+    kind, name, data = await _read_upload(file)
     pid = deck.deck_slug(Path(name).stem)
-    return _ingest_pdf(pid, Path(name).stem, data, None, upload_name=name)
+    return _start_deck(pid, Path(name).stem, kind, upload=(name, data))
 
 
+@app.post("/api/projects/{pid}/deck", status_code=202)
 @app.post("/api/projects/{pid}/pdf", status_code=202)
-async def upload_pdf(pid: str, file: UploadFile = File(...)):
-    """Upload a new PDF into this deck from the browser — the Upload screen with
-    a deck already open.
+async def upload_deck(pid: str, file: UploadFile = File(...)):
+    """Upload a new copy of this deck from the browser — the Upload screen with
+    a deck already open. (`/pdf` is the route's older name.)
 
     The deck keeps its id, its settings and its script: the new slides are
     matched against the previous ingest by content, so an inserted or reordered
@@ -112,30 +152,25 @@ async def upload_pdf(pid: str, file: UploadFile = File(...)):
     """
     if not db.get_project(pid):
         raise HTTPException(404, "not found")
-    name = file.filename or "deck.pdf"
-    if not deck.is_pdf(Path(name)):
-        raise HTTPException(400, deck.NOT_PDF_MESSAGE)
-    data = await file.read()
-    if not data:
-        raise HTTPException(400, "That file is empty.")
-    return _ingest_pdf(pid, db.get_project(pid)["name"], data, None,
-                       upload_name=name)
+    kind, name, data = await _read_upload(file)
+    return _start_deck(pid, db.get_project(pid)["name"], kind, upload=(name, data))
 
 
 @app.post("/api/projects/{pid}/reload", status_code=202)
 async def reload_deck(pid: str):
-    """Re-read the PDF this deck was opened from — after re-exporting it in
-    place. Only available when the deck was opened by path; an uploaded PDF has
-    no file to go back to, so re-upload it instead."""
+    """Re-read the file this deck was opened from — after re-exporting or
+    re-rendering it in place. Only available when the deck was opened by path;
+    an uploaded deck has no file to go back to, so upload it again instead."""
     if not db.get_project(pid):
         raise HTTPException(404, "not found")
-    src = store.source_pdf(pid)
+    src = store.source_file(pid)
     if not src or not src.is_file():
         raise HTTPException(
             409,
-            "This deck's PDF isn't on disk where the app opened it. Upload the "
-            "PDF instead.")
-    return _ingest_pdf(pid, db.get_project(pid)["name"], src.read_bytes(), src)
+            "This deck's file isn't on disk where the app opened it. Upload it "
+            "instead.")
+    return _start_deck(pid, db.get_project(pid)["name"], store.deck_format(pid),
+                       source_path=src)
 
 
 @app.get("/api/projects/{pid}")
@@ -152,13 +187,17 @@ async def get_project(pid: str):
             "index": i,
             "title": s.get("title", ""),
             "narration": s.get("narration", ""),
-            # "edited" | "new" when a re-uploaded PDF moved this slide's content.
+            # Fragment steps on a reveal.js slide; its script wants one [next]
+            # per step. Always 0 on a PDF deck.
+            "steps": int(s.get("steps") or 0),
+            # "edited" | "new" when a re-uploaded deck moved this slide's content.
             "change": s.get("change") or None,
             "image_url": (f"api/projects/{pid}/slides/slide-{i + 1:03d}.png"
                           if png.exists() else None),
         })
     return {
         "id": proj["id"], "name": proj["name"], "state": proj["state"],
+        "format": store.deck_format(pid),
         "stale": store.is_stale(pid), "files": store.file_status(pid),
         "slides": slides, "config": store.read_config(pid),
         "review": store.read_review(pid), "log": proj.get("log", ""),
@@ -173,8 +212,11 @@ async def get_project(pid: str):
 # --------------------------------------------------------------------------- #
 @app.get("/api/projects/{pid}/narration")
 async def get_narration(pid: str):
-    """The script slide by slide, each with the page's extracted text for
-    context, plus `review` — what the last re-uploaded PDF changed.
+    """The script slide by slide, each with the slide's text for context, plus
+    `format` ("pdf" or "revealjs") and `review` — what the last re-uploaded deck
+    changed. A reveal.js slide also has its speaker notes and `steps`, its
+    fragment step count, and `markers`, how many [next] markers its script holds
+    now, so a mismatch with `steps` is visible without parsing.
 
     Slides the re-upload moved carry `change: "edited" | "new"`; that is how
     Claude knows which slides to redraft rather than rewriting a deck whose
@@ -183,7 +225,11 @@ async def get_narration(pid: str):
     if not db.get_project(pid):
         raise HTTPException(404, "not found")
     data = store.read_narration(pid)
+    data["format"] = store.deck_format(pid)
     data["review"] = store.read_review(pid)
+    if data["format"] == store.REVEALJS:
+        for s in data.get("slides", []):
+            s["markers"] = markers.count(s.get("narration", ""))
     return data
 
 
@@ -242,27 +288,86 @@ class ConfigBody(BaseModel):
     style: float | None = None
     use_speaker_boost: bool | None = None
     speed: float | None = None
+    kokoro_voice: str | None = None
+    kokoro_speed: float | None = None
 
 
 @app.put("/api/projects/{pid}/config")
 async def put_config(pid: str, body: ConfigBody):
     if not db.get_project(pid):
         raise HTTPException(404, "not found")
-    merged = store.write_config(pid, body.model_dump())
+    fields = body.model_dump()
+    if fields.get("kokoro_voice") is not None:
+        try:
+            kokoro.check_voice(fields["kokoro_voice"])
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    if fields.get("kokoro_speed") is not None:
+        fields["kokoro_speed"] = kokoro.clamp_speed(fields["kokoro_speed"])
+    merged = store.write_config(pid, fields)
     return {"ok": True, "config": merged}
 
 
 # --------------------------------------------------------------------------- #
-# ElevenLabs
+# Text to speech: the engine, Kokoro, ElevenLabs
 # --------------------------------------------------------------------------- #
 @app.get("/api/tts/status")
 async def tts_status():
-    """Whether an ElevenLabs key is configured. Cheap (no network call) so the
-    app-wide key banner can poll it without hitting ElevenLabs."""
+    """The engine, and whether it can generate. `configured` is whether an
+    ElevenLabs key is set; `ready` is whether Generate can run with the engine in
+    force (always true for Kokoro). Cheap (no network call) so the app-wide key
+    banner can poll it without hitting ElevenLabs."""
+    engine = config.tts_engine()
     return {
+        "engine": engine,
+        "engine_chosen": config.tts_engine_chosen(),
         "configured": bool(config.ELEVENLABS_API_KEY),
+        "ready": engine == "kokoro" or bool(config.ELEVENLABS_API_KEY),
+        "kokoro_downloaded": kokoro.downloaded(),
         "concurrency": config.TTS_CONCURRENCY,
     }
+
+
+class EngineBody(BaseModel):
+    engine: str
+
+
+@app.get("/api/tts/engine")
+async def get_tts_engine():
+    return {"engine": config.tts_engine(), "chosen": config.tts_engine_chosen()}
+
+
+@app.post("/api/tts/engine")
+async def set_tts_engine(body: EngineBody):
+    """Choose the engine for every deck, persisted to ~/.voiceover/.env."""
+    try:
+        config.set_tts_engine(body.engine)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"engine": config.tts_engine(), "chosen": True}
+
+
+@app.get("/api/tts/kokoro/voices")
+async def kokoro_voices():
+    """Kokoro's English voices, with its own quality grades, best first."""
+    return {"voices": kokoro.voice_list(), "default": kokoro.DEFAULT_VOICE,
+            "speed_range": list(kokoro.SPEED_RANGE),
+            "downloaded": kokoro.downloaded()}
+
+
+@app.get("/api/tts/kokoro/preview/{voice}")
+async def kokoro_preview(voice: str, speed: float = kokoro.DEFAULT_SPEED):
+    """A short sample of a Kokoro voice as MP3, synthesized once and cached. The
+    first call downloads the model (about 340 MB), so it can take a minute."""
+    try:
+        kokoro.check_voice(voice)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    try:
+        path = await asyncio.to_thread(kokoro.preview, voice, speed)
+    except RuntimeError as e:
+        raise HTTPException(502, str(e))
+    return FileResponse(path, media_type="audio/mpeg")
 
 
 class KeyBody(BaseModel):
@@ -509,4 +614,4 @@ if config.FRONTEND_DIST.exists():
 else:
     @app.get("/")
     async def root():
-        return {"app": "Voiceover Builder", "frontend": "not built (frontend/dist missing)"}
+        return {"app": "Voiceover", "frontend": "not built (frontend/dist missing)"}

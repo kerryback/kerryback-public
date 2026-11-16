@@ -1,8 +1,9 @@
 """Ingest a PDF deck: one page image per slide, plus the text and fingerprints
 that everything downstream leans on.
 
-A deck is one file — the PDF the author exported from Quarto, PowerPoint,
-Keynote, Beamer or anything else. The app copies it into the deck folder and
+A PDF deck is one file — the PDF the author exported from Quarto, PowerPoint,
+Keynote, Beamer or anything else. (A reveal.js deck is read by reveal_deck.py;
+`deck_kind` below says which reader a file goes to.) The app copies it into the deck folder and
 renders each page to a PNG; the narration is written in the app, against those
 pages, and lives in narration.json.
 
@@ -28,15 +29,28 @@ def is_pdf(path: Path) -> bool:
     return Path(path).suffix.lower() == ".pdf"
 
 
-# What to say when someone hands the app the deck they wrote rather than a PDF.
-# Both formats used to be read directly; a PDF is now the only input, because it
-# is the one thing every slide tool exports and the one thing that renders
-# faithfully (LibreOffice mangles PowerPoint; Quarto needs a render step).
+def deck_kind(path: Path) -> str | None:
+    """Which reader a file goes to: "pdf" (still pages, joined with ffmpeg),
+    "revealjs" (a rendered reveal.js .html, or a .zip holding one, recorded in
+    headless Chrome), or None for anything else. The file type decides; the
+    author is never asked."""
+    ext = Path(path).suffix.lower()
+    if ext == ".pdf":
+        return "pdf"
+    if ext in (".html", ".htm", ".zip"):
+        return "revealjs"
+    return None
+
+
+# What to say when someone hands the app a file it cannot read: usually the deck
+# they wrote rather than its export. PowerPoint and Keynote are read through
+# their PDF, the one thing every slide tool exports and the one thing that
+# renders faithfully (LibreOffice mangles PowerPoint).
 NOT_PDF_MESSAGE = (
-    "Only PDF slide decks are supported. Export your deck to PDF first — in "
-    "PowerPoint, File ▸ Export ▸ Create PDF/XPS; in Quarto, render the deck and "
-    "print it to PDF with `pdf-separate-fragments: false` so each slide is one "
-    "page — then open that PDF."
+    "Voiceover takes a PDF of your slides, or a reveal.js deck (the .html file "
+    "Quarto renders for a revealjs presentation). For PowerPoint or Keynote, "
+    "export the deck to PDF first (in PowerPoint, File ▸ Export ▸ Create "
+    "PDF/XPS), then open that PDF."
 )
 
 

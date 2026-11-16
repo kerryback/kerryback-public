@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ListPlus } from 'lucide-react'
 import { api, toRel } from '../api'
-import { CHANGE_LABELS, estimateSeconds, formatDuration } from '../constants'
+import { CHANGE_LABELS, countMarkers, estimateSeconds, formatDuration } from '../constants'
 import DraftStatus from './DraftStatus'
 import { useToast } from './Toast'
 import { Button, ReviewSummary, Spinner } from './ui'
@@ -12,6 +12,7 @@ const AUTOSAVE_MS = 900
 // script on the right. Edits autosave a slide at a time.
 //
 // The script lives in the app because the input is a PDF, which has nowhere to
+// put it, or a rendered reveal.js file, which is rebuilt on every render; either way there is nowhere to
 // put it. Both authors write to the same copy: the author types here, and
 // Claude Code writes through the narration API — which is why the shell keeps
 // polling, and why an incoming poll must never overwrite what is being typed.
@@ -25,6 +26,7 @@ export default function NarrationView({ project }) {
   const timers = useRef({})
   const pending = useRef({})
   const activeThumbRef = useRef(null)
+  const textRef = useRef(null)
 
   const review = project.review?.total ? project.review : null
 
@@ -134,6 +136,26 @@ export default function NarrationView({ project }) {
     timers.current[index] = setTimeout(() => flush(index), AUTOSAVE_MS)
   }
 
+  // Put a [next] marker at the cursor, with a space either side as needed,
+  // and leave the cursor after it so the author can keep typing.
+  const insertMarker = () => {
+    const el = textRef.current
+    const text = slide?.narration || ''
+    const at = el ? el.selectionStart : text.length
+    const before = text.slice(0, at)
+    const after = text.slice(at)
+    const pre = before && !/\s$/.test(before) ? ' ' : ''
+    const post = after && !/^\s/.test(after) ? ' ' : ''
+    const mark = `${pre}[next]${post}`
+    onEdit(slide.index, before + mark + after)
+    requestAnimationFrame(() => {
+      if (!el) return
+      el.focus()
+      const pos = at + mark.length
+      el.setSelectionRange(pos, pos)
+    })
+  }
+
   const go = async (i) => {
     const s = slides[current]
     if (s) await flushNow(s.index)
@@ -194,7 +216,7 @@ export default function NarrationView({ project }) {
               onClick={() => go(i)}
               title={`${i + 1}. ${s.title || `Slide ${i + 1}`} — ${
                 empty ? 'no narration' : `~${est.seconds}s`
-              }${change ? ` · ${change.label} in the new PDF` : ''}`}
+              }${change ? ` · ${change.label} in the re-read deck` : ''}`}
               className={`group relative aspect-video w-[104px] flex-shrink-0 overflow-hidden rounded-lg border-2 transition ${
                 active
                   ? 'border-brand-600 ring-2 ring-brand-500/20'
@@ -206,7 +228,7 @@ export default function NarrationView({ project }) {
                   src={toRel(s.image_url)}
                   alt=""
                   loading="lazy"
-                  className="h-full w-full object-cover"
+                  className="h-full w-full bg-white object-contain"
                 />
               ) : (
                 <span className="flex h-full w-full items-center justify-center bg-slate-50 text-xs text-muted">
@@ -276,8 +298,8 @@ export default function NarrationView({ project }) {
             <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-200 bg-brand-50/60 px-3 py-2 text-xs">
               <span className="text-slate">
                 {slide.change === 'new'
-                  ? 'This slide is new in the PDF you uploaded — it has no narration yet.'
-                  : 'This slide changed in the PDF you uploaded. The script below is the one it had before.'}
+                  ? 'This slide is new since the deck was last read — it has no narration yet.'
+                  : 'This slide changed since the deck was last read. The script below is the one it had before.'}
               </span>
               <Button
                 variant="subtle"
@@ -288,7 +310,13 @@ export default function NarrationView({ project }) {
               </Button>
             </div>
           )}
+          <MarkerBar
+            steps={slide?.steps || 0}
+            markers={countMarkers(slide?.narration)}
+            onInsert={insertMarker}
+          />
           <textarea
+            ref={textRef}
             value={slide?.narration || ''}
             onChange={(e) => onEdit(slide.index, e.target.value)}
             onBlur={() => flushNow(slide.index)}
@@ -319,6 +347,36 @@ export default function NarrationView({ project }) {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// Fragment steps against [next] markers for the slide in the editor. A slide
+// with no fragments shows nothing. Too few markers is not an error — the steps
+// left over appear when the slide's audio ends — but it is rarely what the
+// author meant, so it is shown in amber.
+function MarkerBar({ steps, markers, onInsert }) {
+  if (!steps) return null
+  const ok = markers === steps
+  const tone = ok
+    ? 'border-line bg-slate-50 text-slate'
+    : 'border-amber-200 bg-amber-50 text-amber-900'
+  let note = ''
+  if (markers < steps)
+    note = ` — ${steps - markers} step${steps - markers === 1 ? '' : 's'} will appear when the audio ends`
+  if (markers > steps) note = ' — extra markers are ignored'
+  return (
+    <div
+      className={`mb-1.5 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-1.5 text-xs ${tone}`}
+    >
+      <span>
+        {steps} fragment step{steps === 1 ? '' : 's'} · {markers} [next] marker
+        {markers === 1 ? '' : 's'}
+        {note}
+      </span>
+      <Button variant="subtle" size="sm" onClick={onInsert}>
+        <ListPlus className="h-3.5 w-3.5" /> Insert [next]
+      </Button>
     </div>
   )
 }

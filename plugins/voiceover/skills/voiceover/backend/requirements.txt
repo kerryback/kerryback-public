@@ -2,6 +2,8 @@ fastapi
 uvicorn
 httpx
 pymupdf
+playwright
 python-multipart
 python-dotenv
 imageio-ffmpeg
+kokoro-onnx==0.6.1
